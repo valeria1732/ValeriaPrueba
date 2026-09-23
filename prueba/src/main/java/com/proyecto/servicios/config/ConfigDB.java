@@ -44,8 +44,12 @@ public class ConfigDB {
             config.setJdbcUrl(env.getProperty("spring.datasource.url"));
             config.setPassword(env.getProperty("spring.datasource.password"));
             config.setUsername(env.getProperty("spring.datasource.username"));
+            String driverClass = env.getProperty("spring.datasource.driver-class-name");
+            if (driverClass != null && !driverClass.isBlank()) {
+                config.setDriverClassName(driverClass);
+            }
             config.setMaximumPoolSize(10);
-            config.setMaxLifetime(18800);
+            config.setMaxLifetime(1800000);
             config.setConnectionTimeout(5000);
             config.setValidationTimeout(5000);
             config.setMinimumIdle(2);
@@ -74,9 +78,12 @@ public class ConfigDB {
             em.setJpaVendorAdapter(vendorAdapter);
           Map<String, Object> properties=new HashMap<>();
           properties.put("hibernate.hbm2ddl.auto", "none");
-            properties.put("hibernate.show-sql", false);
-            properties.put("hibernate.dialect", "org.hibernate.dialect.PostgreSQLDialect");
-            properties.put("jakarta.persistence.query.timeout", 600000);
+          properties.put("hibernate.show-sql", false);
+          String dialect = env.getProperty("spring.jpa.properties.hibernate.dialect");
+          if (dialect != null && !dialect.isBlank()) {
+              properties.put("hibernate.dialect", dialect);
+          }
+          properties.put("jakarta.persistence.query.timeout", 600000);
 
 
         } catch (Exception e) {
