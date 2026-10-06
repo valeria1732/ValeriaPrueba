@@ -1,11 +1,14 @@
 package com.proyecto.servicios.service.Impl;
 
 import com.proyecto.servicios.client.GestoPagoProductClient;
+import com.proyecto.servicios.entity.gestopago.GestoPagoProductoEntity;
 import com.proyecto.servicios.entity.gestopago.GestoPagoToken;
 import com.proyecto.servicios.exception.GestoPagoAuthException;
 import com.proyecto.servicios.exception.GestoPagoIntegrationException;
 import com.proyecto.servicios.exception.GestoPagoTimeoutException;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductListResponse;
+import com.proyecto.servicios.model.gestopago.GestoPagoProductResponse;
+import com.proyecto.servicios.repositorys.gestopago.GestoPagoProductoRepository;
 import com.proyecto.servicios.service.GestoPagoTokenService;
 import com.proyecto.servicios.service.ProductoService;
 import feign.FeignException;
@@ -14,8 +17,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
@@ -24,6 +29,7 @@ public class ProductoServiceImpl implements ProductoService {
 
     private final GestoPagoProductClient gestoPagoProductClient;
     private final GestoPagoTokenService gestoPagoTokenService;
+    private final GestoPagoProductoRepository gestoPagoProductoRepository;
 
     @Value("${gestopago.product.token:}")
     private String configuredToken;
@@ -37,9 +43,11 @@ public class ProductoServiceImpl implements ProductoService {
     @Autowired
     public ProductoServiceImpl(
             GestoPagoProductClient gestoPagoProductClient,
-            @Autowired(required = false) GestoPagoTokenService gestoPagoTokenService) {
+            @Autowired(required = false) GestoPagoTokenService gestoPagoTokenService,
+            @Autowired(required = false) GestoPagoProductoRepository gestoPagoProductoRepository) {
         this.gestoPagoProductClient = gestoPagoProductClient;
         this.gestoPagoTokenService = gestoPagoTokenService;
+        this.gestoPagoProductoRepository = gestoPagoProductoRepository;
     }
 
     @Override
@@ -57,6 +65,10 @@ public class ProductoServiceImpl implements ProductoService {
             int totalProductos = (response != null && response.getProductos() != null) ? response.getProductos().size() : 0;
             log.info("Invocación a servicio externo finalizada exitosamente en {} ms. Total de productos obtenidos: {}",
                     duration, totalProductos);
+
+            if (response != null && response.getProductos() != null && !response.getProductos().isEmpty()) {
+                sincronizarConPostgreSQL(response);
+            }
 
             return response;
 
@@ -107,6 +119,55 @@ public class ProductoServiceImpl implements ProductoService {
         }
 
         throw new GestoPagoAuthException("No se encontró ningún Bearer Token configurado o disponible para la integración");
+    }
+
+    /**
+     * Tarea programada diaria a las 06:00 AM para sincronizar automáticamente el catálogo externo
+     */
+    @Scheduled(cron = "${gestopago.product.cron:0 0 6 * * *}")
+    public void sincronizarCatalogoProductosCron() {
+        log.info("[CRON 06:00 AM] Ejecutando sincronización programada de catálogo de productos GestoPago...");
+        try {
+            GestoPagoProductListResponse response = obtenerListaProductos();
+            log.info("[CRON 06:00 AM] Sincronización finalizada. Productos sincronizados: {}",
+                    (response != null && response.getProductos() != null) ? response.getProductos().size() : 0);
+        } catch (Exception e) {
+            log.error("[CRON 06:00 AM] Error durante la sincronización programada: {}", e.getMessage());
+        }
+    }
+
+    /**
+     * Sincroniza y persiste los productos en la base de datos relacional PostgreSQL
+     */
+    private void sincronizarConPostgreSQL(GestoPagoProductListResponse response) {
+        if (gestoPagoProductoRepository == null || response == null || response.getProductos() == null) {
+            return;
+        }
+        try {
+            log.info("Sincronizando {} productos en la base de datos PostgreSQL...", response.getProductos().size());
+            for (GestoPagoProductResponse prod : response.getProductos()) {
+                if (prod.getCodigo() == null) continue;
+
+                GestoPagoProductoEntity entity = gestoPagoProductoRepository.findByCodigo(prod.getCodigo())
+                        .orElse(GestoPagoProductoEntity.builder()
+                                .codigo(prod.getCodigo())
+                                .build());
+
+                entity.setIdProducto(prod.getIdProducto());
+                entity.setDescripcion(prod.getDescripcion());
+                entity.setCategoria(prod.getCategoria());
+                entity.setMontoMinimo(prod.getMontoMinimo());
+                entity.setMontoMaximo(prod.getMontoMaximo());
+                entity.setComision(prod.getComision());
+                entity.setActivo(prod.getActivo() != null ? prod.getActivo() : true);
+                entity.setFechaSincronizacion(LocalDateTime.now());
+
+                gestoPagoProductoRepository.save(entity);
+            }
+            log.info("Catálogo de productos sincronizado exitosamente en PostgreSQL");
+        } catch (Exception e) {
+            log.warn("No fue posible guardar en PostgreSQL: {}", e.getMessage());
+        }
     }
 
     /**

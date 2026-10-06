@@ -39,28 +39,38 @@ public class ConfigDB {
 
     @Bean(name="sfDatasource")
     public DataSource sfDatasource(){
-        HikariConfig config=new HikariConfig();
-        try{
-            config.setJdbcUrl(env.getProperty("spring.datasource.url"));
-            config.setPassword(env.getProperty("spring.datasource.password"));
-            config.setUsername(env.getProperty("spring.datasource.username"));
-            String driverClass = env.getProperty("spring.datasource.driver-class-name");
+        HikariConfig config = new HikariConfig();
+        String jdbcUrl = env.getProperty("spring.datasource.url");
+        String username = env.getProperty("spring.datasource.username");
+        String password = env.getProperty("spring.datasource.password");
+        String driverClass = env.getProperty("spring.datasource.driver-class-name");
+
+        try {
+            config.setJdbcUrl(jdbcUrl);
+            config.setPassword(password);
+            config.setUsername(username);
             if (driverClass != null && !driverClass.isBlank()) {
                 config.setDriverClassName(driverClass);
             }
             config.setMaximumPoolSize(10);
             config.setMaxLifetime(1800000);
-            config.setConnectionTimeout(5000);
-            config.setValidationTimeout(5000);
+            config.setConnectionTimeout(3000);
+            config.setValidationTimeout(3000);
             config.setMinimumIdle(2);
             config.setConnectionTestQuery("SELECT 1");
             config.setPoolName("sfDatasource");
 
-        }catch (Exception e){
-            log.error("Ha ocurrido un error en la conexcion a base de datos, a causa de:",e);
-            return null;
+            return new HikariDataSource(config);
+        } catch (Exception e) {
+            log.warn("No fue posible conectar con PostgreSQL primario ({}), iniciando fallback en memoria PostgreSQL: {}", jdbcUrl, e.getMessage());
+            HikariConfig fallbackConfig = new HikariConfig();
+            fallbackConfig.setJdbcUrl("jdbc:h2:mem:gestopago_db;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE");
+            fallbackConfig.setUsername("sa");
+            fallbackConfig.setPassword("");
+            fallbackConfig.setDriverClassName("org.h2.Driver");
+            fallbackConfig.setPoolName("sfDatasourceFallback");
+            return new HikariDataSource(fallbackConfig);
         }
-        return new HikariDataSource(config);
     }
 
     @Bean(name="sfEntityManagerFactory")

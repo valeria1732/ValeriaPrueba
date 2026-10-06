@@ -17,21 +17,27 @@ import java.util.Optional;
 @Service
 @Slf4j
 public class PersonasServiceImpl implements PersonaService {
+
+    private final PersonasRepository personasRepository;
+
     @Autowired
-    private PersonasRepository personasRepository;
+    public PersonasServiceImpl(PersonasRepository personasRepository) {
+        this.personasRepository = personasRepository;
+    }
+
     @Override
     public PersonaResponse creaPersona(PersonasRequest personasRequest) {
-        PersonaResponse person=new PersonaResponse();
-     Personas persona=new Personas();
-     persona.setNombre(personasRequest.getNombre());
-     persona.setApellidoMaterno(personasRequest.getApellidoMaterno());
-     persona.setApellidoP(personasRequest.getApellidoP());
-     personasRepository.save(persona);
-     person.setCodigo(1);
-     person.setMensaje("Exito");
-     BeanUtils.copyProperties(persona,person);
+        PersonaResponse person = new PersonaResponse();
+        Personas persona = new Personas();
+        persona.setNombre(personasRequest.getNombre());
+        persona.setApellidoMaterno(personasRequest.getApellidoMaterno());
+        persona.setApellidoP(personasRequest.getApellidoP());
+        personasRepository.save(persona);
+        person.setCodigo(1);
+        person.setMensaje("Exito");
+        BeanUtils.copyProperties(persona, person);
 
-     return person;
+        return person;
     }
 
     @Override
