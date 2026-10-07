@@ -69,12 +69,34 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status != null ? status : HttpStatus.BAD_GATEWAY).body(response);
     }
 
+    @ExceptionHandler(ClienteNotFoundException.class)
+    public ResponseEntity<GenericResponse> handleClienteNotFoundException(ClienteNotFoundException ex) {
+        log.warn("Cliente no encontrado: {}", ex.getMessage());
+        GenericResponse response = new GenericResponse();
+        response.setCodigo(HttpStatus.NOT_FOUND.value());
+        response.setMensaje(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    }
+
+    @ExceptionHandler(ClienteBusinessException.class)
+    public ResponseEntity<GenericResponse> handleClienteBusinessException(ClienteBusinessException ex) {
+        log.warn("Regla de negocio no cumplida: {}", ex.getMessage());
+        GenericResponse response = new GenericResponse();
+        response.setCodigo(HttpStatus.BAD_REQUEST.value());
+        response.setMensaje(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<GenericResponse> handleValidationException(MethodArgumentNotValidException ex) {
         log.warn("Error de validación de petición: {}", ex.getMessage());
+        String primerError = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+                .orElse("Parámetros de entrada inválidos");
         GenericResponse response = new GenericResponse();
         response.setCodigo(HttpStatus.BAD_REQUEST.value());
-        response.setMensaje("Parámetros de entrada inválidos");
+        response.setMensaje(primerError);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
     }
 
