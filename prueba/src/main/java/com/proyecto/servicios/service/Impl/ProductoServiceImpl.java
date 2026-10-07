@@ -17,6 +17,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -51,6 +53,7 @@ public class ProductoServiceImpl implements ProductoService {
     }
 
     @Override
+    @Cacheable(value = "productosCache", key = "'catalogo'", unless = "#result == null || #result.productos == null || #result.productos.isEmpty()")
     public GestoPagoProductListResponse obtenerListaProductos() {
         log.info("Iniciando invocación a servicio externo GestoPago: GET /sistema/service/getProductList.do");
         long startTime = System.currentTimeMillis();
@@ -121,6 +124,12 @@ public class ProductoServiceImpl implements ProductoService {
         throw new GestoPagoAuthException("No se encontró ningún Bearer Token configurado o disponible para la integración");
     }
 
+    @Override
+    @CacheEvict(value = "productosCache", allEntries = true)
+    public void limpiarCacheProductos() {
+        log.info("Caché de productos en Redis invalidada exitosamente.");
+    }
+
     /**
      * Tarea programada diaria a las 06:00 AM para sincronizar automáticamente el catálogo externo
      */
@@ -128,6 +137,7 @@ public class ProductoServiceImpl implements ProductoService {
     public void sincronizarCatalogoProductosCron() {
         log.info("[CRON 06:00 AM] Ejecutando sincronización programada de catálogo de productos GestoPago...");
         try {
+            limpiarCacheProductos();
             GestoPagoProductListResponse response = obtenerListaProductos();
             log.info("[CRON 06:00 AM] Sincronización finalizada. Productos sincronizados: {}",
                     (response != null && response.getProductos() != null) ? response.getProductos().size() : 0);

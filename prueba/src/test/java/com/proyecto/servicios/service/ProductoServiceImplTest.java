@@ -226,4 +226,10 @@ class ProductoServiceImplTest {
         assertNotNull(result);
         verify(gestoPagoProductClient, times(1)).getProductList("Bearer custom_bearer_token");
     }
+
+    @Test
+    @DisplayName("Debe ejecutar la limpieza de caché de productos sin arrojar excepciones")
+    void testLimpiarCacheProductos() {
+        assertDoesNotThrow(() -> productoService.limpiarCacheProductos());
+    }
 }

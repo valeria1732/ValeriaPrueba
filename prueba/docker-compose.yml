@@ -12,5 +12,35 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    container_name: gestopago-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+
+  app:
+    build: .
+    container_name: gestopago-app
+    restart: always
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8088:8088"
+    environment:
+      SERVER_PORT: 8088
+      DB_URL: jdbc:postgresql://postgres:5432/gestopago_db
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      GESTOPAGO_PRODUCT_URL: https://gestopago.portalgp.com
+      GESTOPAGO_PRODUCT_TOKEN: default_bearer_token
+
 volumes:
   postgres_data:
+  redis_data:

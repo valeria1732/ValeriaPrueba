@@ -42,4 +42,12 @@ public class ProductoController {
         GestoPagoProductListResponse response = productoService.obtenerListaProductos();
         return ResponseEntity.ok(response);
     }
+
+    @Operation(summary = "Limpiar caché de productos en Redis", description = "Invalida la caché de productos almacenada en Redis")
+    @org.springframework.web.bind.annotation.DeleteMapping("/cache")
+    public ResponseEntity<Void> limpiarCache() {
+        log.info("Petición recibida en DELETE /productos/cache");
+        productoService.limpiarCacheProductos();
+        return ResponseEntity.noContent().build();
+    }
 }

@@ -21,7 +21,8 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.math.BigDecimal;
 import java.util.List;
 
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -110,5 +111,16 @@ class ProductoControllerTest {
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.codigo").value(502))
                 .andExpect(jsonPath("$.mensaje").value("Error en respuesta externa"));
+    }
+
+    @Test
+    @DisplayName("DELETE /productos/cache debe responder 204 No Content e invalidar la caché")
+    void testLimpiarCache_204_NoContent() throws Exception {
+        doNothing().when(productoService).limpiarCacheProductos();
+
+        mockMvc.perform(delete("/productos/cache"))
+                .andExpect(status().isNoContent());
+
+        verify(productoService, times(1)).limpiarCacheProductos();
     }
 }
