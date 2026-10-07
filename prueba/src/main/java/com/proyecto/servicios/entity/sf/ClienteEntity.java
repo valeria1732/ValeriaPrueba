@@ -1,5 +1,6 @@
 package com.proyecto.servicios.entity.sf;
 
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -7,6 +8,8 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(name = "clientes")
@@ -23,16 +26,16 @@ public class ClienteEntity implements Serializable {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;
 
-    @Column(name = "nombre", nullable = false, length = 100)
+    @Column(name = "nombre", nullable = false, length = 50)
     private String nombre;
 
-    @Column(name = "segundo_nombre", length = 100)
+    @Column(name = "segundo_nombre", length = 50)
     private String segundoNombre;
 
-    @Column(name = "apellido_paterno", nullable = false, length = 100)
+    @Column(name = "apellido_paterno", nullable = false, length = 50)
     private String apellidoPaterno;
 
-    @Column(name = "apellido_materno", length = 100)
+    @Column(name = "apellido_materno", nullable = false, length = 50)
     private String apellidoMaterno;
 
     @Column(name = "fecha_nacimiento", nullable = false)
@@ -44,34 +47,32 @@ public class ClienteEntity implements Serializable {
     @Column(name = "rfc", nullable = false, unique = true, length = 13)
     private String rfc;
 
-    @Column(name = "telefono", length = 20)
-    private String telefono;
+    @Column(name = "sexo", nullable = false, length = 20)
+    private String sexo;
 
-    @Column(name = "email", length = 150)
-    private String email;
+    @Column(name = "nacionalidad", nullable = false, length = 50)
+    @Builder.Default
+    private String nacionalidad = "Mexicana";
 
-    @Column(name = "calle", length = 150)
-    private String calle;
+    @Column(name = "estado_civil", nullable = false, length = 30)
+    private String estadoCivil;
 
-    @Column(name = "numero_exterior", length = 50)
-    private String numeroExterior;
+    @Column(name = "correo", nullable = false, unique = true, length = 100)
+    private String correo;
 
-    @Column(name = "colonia", length = 100)
-    private String colonia;
+    @Column(name = "telefono_movil", nullable = false, length = 10)
+    private String telefonoMovil;
 
-    @Column(name = "codigo_postal", length = 10)
-    private String codigoPostal;
+    @Column(name = "telefono_alternativo", length = 10)
+    private String telefonoAlternativo;
 
-    @Column(name = "ciudad", length = 100)
-    private String ciudad;
+    @Column(name = "ocupacion", nullable = false, length = 100)
+    private String ocupacion;
 
-    @Column(name = "estado", length = 100)
-    private String estado;
+    @Column(name = "empresa", nullable = false, length = 100)
+    private String empresa;
 
-    @Column(name = "puesto_laboral", length = 100)
-    private String puestoLaboral;
-
-    @Column(name = "ingreso_mensual", precision = 12, scale = 2)
+    @Column(name = "ingreso_mensual", nullable = false, precision = 12, scale = 2)
     private BigDecimal ingresoMensual;
 
     @Column(name = "activo", nullable = false)
@@ -87,7 +88,17 @@ public class ClienteEntity implements Serializable {
     private LocalDateTime fechaActualizacion = LocalDateTime.now();
 
     @OneToOne(mappedBy = "cliente", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
-    private CuentaBancariaEntity cuentaBancaria;
+    @JsonManagedReference
+    private DomicilioEntity domicilio;
+
+    @OneToOne(mappedBy = "cliente", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @JsonManagedReference
+    private UsuarioEntity usuario;
+
+    @OneToMany(mappedBy = "cliente", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @Builder.Default
+    @JsonManagedReference
+    private List<CuentaEntity> cuentas = new ArrayList<>();
 
     @PreUpdate
     public void preUpdate() {

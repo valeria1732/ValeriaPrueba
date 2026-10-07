@@ -1,72 +1,86 @@
 package com.proyecto.servicios.model.cliente;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Email;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Pattern;
-import jakarta.validation.constraints.Size;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
 import lombok.*;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "Datos para actualización total de información de cliente")
+@Schema(description = "Datos para actualización completa de información de cliente (excepto CURP y RFC)")
 public class ClienteActualizaRequest implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     @NotBlank(message = "El nombre es obligatorio")
-    @Size(max = 100)
-    @Schema(description = "Primer nombre del cliente", example = "Mariana")
+    @Size(min = 2, max = 50)
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+$", message = "El nombre solo puede contener letras y espacios")
+    @Schema(description = "Nombre", example = "Mariana")
     private String nombre;
 
-    @Size(max = 100)
-    @Schema(description = "Segundo nombre del cliente", example = "Sofia")
+    @Size(max = 50)
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]*$", message = "El segundo nombre solo puede contener letras y espacios")
+    @Schema(description = "Segundo nombre", example = "Sofia")
     private String segundoNombre;
 
     @NotBlank(message = "El apellido paterno es obligatorio")
-    @Size(max = 100)
-    @Schema(description = "Apellido paterno del cliente", example = "Hernandez")
+    @Size(min = 2, max = 50)
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+$", message = "El apellido paterno solo puede contener letras y espacios")
+    @Schema(description = "Apellido paterno", example = "Hernandez")
     private String apellidoPaterno;
 
-    @Size(max = 100)
-    @Schema(description = "Apellido materno del cliente", example = "Torres")
+    @NotBlank(message = "El apellido materno es obligatorio")
+    @Size(min = 2, max = 50)
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+$", message = "El apellido materno solo puede contener letras y espacios")
+    @Schema(description = "Apellido materno", example = "Torres")
     private String apellidoMaterno;
 
-    @Pattern(regexp = "^\\d{10}$", message = "El teléfono debe contener 10 dígitos numéricos")
-    @Schema(description = "Teléfono celular a 10 dígitos", example = "5512345678")
-    private String telefono;
+    @NotNull(message = "La fecha de nacimiento es obligatoria")
+    @Past(message = "La fecha de nacimiento debe ser en el pasado")
+    @Schema(description = "Fecha de nacimiento", example = "1994-08-22")
+    private LocalDate fechaNacimiento;
 
-    @Email(message = "El formato de correo electrónico es inválido")
-    @Schema(description = "Correo electrónico de contacto", example = "mariana.hernandez@example.com")
-    private String email;
+    @NotBlank(message = "El sexo es obligatorio")
+    @Schema(description = "Sexo", example = "FEMENINO")
+    private String sexo;
 
-    @Schema(description = "Calle de domicilio", example = "Av. Insurgentes Sur")
-    private String calle;
+    @NotBlank(message = "La nacionalidad es obligatoria")
+    @Schema(description = "Nacionalidad", example = "Mexicana")
+    private String nacionalidad;
 
-    @Schema(description = "Número exterior de domicilio", example = "1200")
-    private String numeroExterior;
+    @NotBlank(message = "El estado civil es obligatorio")
+    @Schema(description = "Estado civil", example = "CASADO")
+    private String estadoCivil;
 
-    @Schema(description = "Colonia de domicilio", example = "Del Valle")
-    private String colonia;
+    @NotBlank(message = "El teléfono móvil es obligatorio")
+    @Pattern(regexp = "^\\d{10}$", message = "El teléfono móvil debe contener exactamente 10 dígitos numéricos")
+    @Schema(description = "Teléfono móvil", example = "5512345678")
+    private String telefonoMovil;
 
-    @Pattern(regexp = "^\\d{5}$", message = "El código postal debe tener 5 dígitos")
-    @Schema(description = "Código postal", example = "03100")
-    private String codigoPostal;
+    @Pattern(regexp = "^(\\d{10})?$", message = "El teléfono alternativo debe contener exactamente 10 dígitos numéricos")
+    @Schema(description = "Teléfono alternativo", example = "5587654321")
+    private String telefonoAlternativo;
 
-    @Schema(description = "Ciudad", example = "Ciudad de México")
-    private String ciudad;
+    @Valid
+    @Schema(description = "Domicilio")
+    private DomicilioDTO domicilio;
 
-    @Schema(description = "Estado", example = "CDMX")
-    private String estado;
+    @NotBlank(message = "La ocupación es obligatoria")
+    @Schema(description = "Ocupación", example = "Líder Técnico")
+    private String ocupacion;
 
-    @Schema(description = "Puesto o cargo laboral", example = "Líder Técnico")
-    private String puestoLaboral;
+    @NotBlank(message = "La empresa es obligatoria")
+    @Schema(description = "Empresa", example = "Fintech Innovations")
+    private String empresa;
 
-    @Schema(description = "Ingreso mensual estimado", example = "42000.00")
+    @NotNull(message = "El ingreso mensual es obligatorio")
+    @DecimalMin(value = "0.01", inclusive = true, message = "El ingreso mensual debe ser mayor a cero")
+    @Schema(description = "Ingreso mensual", example = "50000.00")
     private BigDecimal ingresoMensual;
 }

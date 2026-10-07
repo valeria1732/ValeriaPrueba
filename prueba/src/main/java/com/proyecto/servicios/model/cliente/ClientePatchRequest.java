@@ -1,64 +1,76 @@
 package com.proyecto.servicios.model.cliente;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.Email;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import lombok.*;
 
 import java.io.Serializable;
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "Campos opcionales para actualización parcial de cliente")
+@Schema(description = "Campos opcionales para actualización parcial de cliente (no permite CURP ni RFC)")
 public class ClientePatchRequest implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    @Schema(description = "Primer nombre", example = "Mariana")
+    @Size(min = 2, max = 50)
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+$", message = "El nombre solo puede contener letras y espacios")
+    @Schema(description = "Nombre", example = "Mariana")
     private String nombre;
 
+    @Size(max = 50)
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]*$", message = "El segundo nombre solo puede contener letras y espacios")
     @Schema(description = "Segundo nombre", example = "Sofia")
     private String segundoNombre;
 
+    @Size(min = 2, max = 50)
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+$", message = "El apellido paterno solo puede contener letras y espacios")
     @Schema(description = "Apellido paterno", example = "Hernandez")
     private String apellidoPaterno;
 
+    @Size(min = 2, max = 50)
+    @Pattern(regexp = "^[a-zA-ZáéíóúÁÉÍÓÚñÑ\\s]+$", message = "El apellido materno solo puede contener letras y espacios")
     @Schema(description = "Apellido materno", example = "Torres")
     private String apellidoMaterno;
 
-    @Pattern(regexp = "^\\d{10}$", message = "El teléfono debe contener 10 dígitos numéricos")
+    @Schema(description = "Fecha de nacimiento", example = "1994-08-22")
+    private LocalDate fechaNacimiento;
+
+    @Schema(description = "Sexo", example = "FEMENINO")
+    private String sexo;
+
+    @Schema(description = "Nacionalidad", example = "Mexicana")
+    private String nacionalidad;
+
+    @Schema(description = "Estado civil", example = "SOLTERO")
+    private String estadoCivil;
+
+    @Pattern(regexp = "^\\d{10}$", message = "El teléfono móvil debe contener 10 dígitos numéricos")
     @Schema(description = "Teléfono celular", example = "5598765432")
-    private String telefono;
+    private String telefonoMovil;
 
-    @Email(message = "El formato de correo electrónico es inválido")
-    @Schema(description = "Correo electrónico", example = "m.hernandez.nuevo@example.com")
-    private String email;
+    @Pattern(regexp = "^(\\d{10})?$", message = "El teléfono alternativo debe contener 10 dígitos numéricos")
+    @Schema(description = "Teléfono alternativo", example = "5511223344")
+    private String telefonoAlternativo;
 
-    @Schema(description = "Calle", example = "Av. Paseo de la Reforma")
-    private String calle;
+    @Valid
+    @Schema(description = "Domicilio")
+    private DomicilioDTO domicilio;
 
-    @Schema(description = "Número exterior", example = "222")
-    private String numeroExterior;
+    @Schema(description = "Ocupación", example = "Gerente de Sistemas")
+    private String ocupacion;
 
-    @Schema(description = "Colonia", example = "Juárez")
-    private String colonia;
+    @Schema(description = "Empresa", example = "Fintech Group")
+    private String empresa;
 
-    @Pattern(regexp = "^\\d{5}$", message = "El código postal debe tener 5 dígitos")
-    @Schema(description = "Código postal", example = "06600")
-    private String codigoPostal;
-
-    @Schema(description = "Ciudad", example = "Ciudad de México")
-    private String ciudad;
-
-    @Schema(description = "Estado", example = "CDMX")
-    private String estado;
-
-    @Schema(description = "Puesto laboral", example = "Gerente de Sistemas")
-    private String puestoLaboral;
-
-    @Schema(description = "Ingreso mensual", example = "50000.00")
+    @DecimalMin(value = "0.01", inclusive = true, message = "El ingreso mensual debe ser mayor a cero")
+    @Schema(description = "Ingreso mensual", example = "60000.00")
     private BigDecimal ingresoMensual;
 }

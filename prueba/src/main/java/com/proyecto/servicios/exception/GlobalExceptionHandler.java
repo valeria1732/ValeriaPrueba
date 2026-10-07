@@ -69,17 +69,55 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(status != null ? status : HttpStatus.BAD_GATEWAY).body(response);
     }
 
-    @ExceptionHandler(ClienteNotFoundException.class)
-    public ResponseEntity<GenericResponse> handleClienteNotFoundException(ClienteNotFoundException ex) {
-        log.warn("Cliente no encontrado: {}", ex.getMessage());
+    @ExceptionHandler({
+            CurpDuplicadaException.class,
+            RfcDuplicadoException.class,
+            CorreoDuplicadoException.class
+    })
+    public ResponseEntity<GenericResponse> handleDuplicadosException(RuntimeException ex) {
+        log.warn("Conflicto por duplicidad: {}", ex.getMessage());
+        GenericResponse response = new GenericResponse();
+        response.setCodigo(HttpStatus.CONFLICT.value());
+        response.setMensaje(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    }
+
+    @ExceptionHandler({
+            ClienteNotFoundException.class,
+            CuentaNotFoundException.class,
+            UsuarioNotFoundException.class
+    })
+    public ResponseEntity<GenericResponse> handleNotFoundExceptions(RuntimeException ex) {
+        log.warn("Recurso no encontrado: {}", ex.getMessage());
         GenericResponse response = new GenericResponse();
         response.setCodigo(HttpStatus.NOT_FOUND.value());
         response.setMensaje(ex.getMessage());
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
     }
 
-    @ExceptionHandler(ClienteBusinessException.class)
-    public ResponseEntity<GenericResponse> handleClienteBusinessException(ClienteBusinessException ex) {
+    @ExceptionHandler(UsuarioInactivoException.class)
+    public ResponseEntity<GenericResponse> handleUsuarioInactivoException(UsuarioInactivoException ex) {
+        log.warn("Acceso denegado a usuario inactivo: {}", ex.getMessage());
+        GenericResponse response = new GenericResponse();
+        response.setCodigo(HttpStatus.FORBIDDEN.value());
+        response.setMensaje(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    }
+
+    @ExceptionHandler(CredencialesInvalidasException.class)
+    public ResponseEntity<GenericResponse> handleCredencialesInvalidasException(CredencialesInvalidasException ex) {
+        log.warn("Credenciales inválidas: {}", ex.getMessage());
+        GenericResponse response = new GenericResponse();
+        response.setCodigo(HttpStatus.UNAUTHORIZED.value());
+        response.setMensaje(ex.getMessage());
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @ExceptionHandler({
+            ContrasenaInvalidaException.class,
+            ClienteBusinessException.class
+    })
+    public ResponseEntity<GenericResponse> handleBusinessExceptions(RuntimeException ex) {
         log.warn("Regla de negocio no cumplida: {}", ex.getMessage());
         GenericResponse response = new GenericResponse();
         response.setCodigo(HttpStatus.BAD_REQUEST.value());

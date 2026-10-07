@@ -9,6 +9,7 @@ import com.proyecto.servicios.model.cliente.ClienteActualizaRequest;
 import com.proyecto.servicios.model.cliente.ClientePatchRequest;
 import com.proyecto.servicios.model.cliente.ClienteRegistroRequest;
 import com.proyecto.servicios.model.cliente.ClienteResponse;
+import com.proyecto.servicios.model.cliente.DomicilioDTO;
 import com.proyecto.servicios.service.ClienteService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -64,17 +65,38 @@ class ClienteControllerTest {
                 .build();
     }
 
+    private DomicilioDTO crearDomicilioValido() {
+        return DomicilioDTO.builder()
+                .calle("Insurgentes Sur")
+                .numeroExterior("1602")
+                .colonia("Credito Constructor")
+                .municipio("Benito Juarez")
+                .estado("CDMX")
+                .codigoPostal("03940")
+                .pais("Mexico")
+                .build();
+    }
+
     @Test
     @DisplayName("POST /clientes debe responder 201 Created al registrar un cliente exitosamente")
     void testRegistrarCliente_201_Created() throws Exception {
         ClienteRegistroRequest request = ClienteRegistroRequest.builder()
                 .nombre("Mariana")
                 .apellidoPaterno("Hernandez")
+                .apellidoMaterno("Torres")
                 .fechaNacimiento(LocalDate.of(1994, 8, 22))
                 .curp("HETM940822MDFRRN03")
                 .rfc("HETM9408228K4")
-                .telefono("5512345678")
-                .email("mariana@example.com")
+                .sexo("FEMENINO")
+                .nacionalidad("Mexicana")
+                .estadoCivil("SOLTERO")
+                .correo("mariana@example.com")
+                .telefonoMovil("5512345678")
+                .domicilio(crearDomicilioValido())
+                .ocupacion("Ingeniera")
+                .empresa("Tech Corp")
+                .ingresoMensual(new BigDecimal("45000.00"))
+                .password("Segura123!")
                 .saldoInicial(new BigDecimal("1000.00"))
                 .build();
 
@@ -95,9 +117,20 @@ class ClienteControllerTest {
         ClienteRegistroRequest request = ClienteRegistroRequest.builder()
                 .nombre("Mariana")
                 .apellidoPaterno("Hernandez")
+                .apellidoMaterno("Torres")
                 .fechaNacimiento(LocalDate.of(1994, 8, 22))
                 .curp("HETM940822MDFRRN03")
                 .rfc("HETM9408228K4")
+                .sexo("FEMENINO")
+                .nacionalidad("Mexicana")
+                .estadoCivil("SOLTERO")
+                .correo("mariana@example.com")
+                .telefonoMovil("5512345678")
+                .domicilio(crearDomicilioValido())
+                .ocupacion("Ingeniera")
+                .empresa("Tech Corp")
+                .ingresoMensual(new BigDecimal("45000.00"))
+                .password("Segura123!")
                 .build();
 
         when(clienteService.registrarCliente(any(ClienteRegistroRequest.class)))
@@ -136,7 +169,8 @@ class ClienteControllerTest {
     @Test
     @DisplayName("GET /clientes debe responder 200 OK con la lista de clientes")
     void testConsultarClientes_200_OK() throws Exception {
-        when(clienteService.consultarClientes(any(), any(), any(), any())).thenReturn(List.of(mockResponse));
+        when(clienteService.consultarClientes(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+                .thenReturn(List.of(mockResponse));
 
         mockMvc.perform(get("/clientes?nombre=Mariana"))
                 .andExpect(status().isOk())
@@ -149,7 +183,15 @@ class ClienteControllerTest {
         ClienteActualizaRequest request = ClienteActualizaRequest.builder()
                 .nombre("Mariana")
                 .apellidoPaterno("Hernandez")
-                .puestoLaboral("Tech Lead")
+                .apellidoMaterno("Torres")
+                .fechaNacimiento(LocalDate.of(1994, 8, 22))
+                .sexo("FEMENINO")
+                .nacionalidad("Mexicana")
+                .estadoCivil("SOLTERO")
+                .telefonoMovil("5512345678")
+                .ocupacion("Tech Lead")
+                .empresa("Tech Corp")
+                .ingresoMensual(new BigDecimal("50000.00"))
                 .build();
 
         when(clienteService.actualizarCliente(eq(1), any(ClienteActualizaRequest.class))).thenReturn(mockResponse);
@@ -165,7 +207,7 @@ class ClienteControllerTest {
     @DisplayName("PATCH /clientes/{id} debe responder 200 OK al actualizar parcialmente")
     void testActualizarParcial_200_OK() throws Exception {
         ClientePatchRequest request = ClientePatchRequest.builder()
-                .telefono("5512345678")
+                .telefonoMovil("5512345678")
                 .build();
 
         when(clienteService.actualizarParcial(eq(1), any(ClientePatchRequest.class))).thenReturn(mockResponse);

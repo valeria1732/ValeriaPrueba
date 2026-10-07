@@ -1,5 +1,7 @@
 package com.proyecto.servicios.model.cliente;
 
+import com.proyecto.servicios.model.cuenta.CuentaResponse;
+import com.proyecto.servicios.model.usuario.UsuarioResponse;
 import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.*;
 
@@ -7,12 +9,14 @@ import java.io.Serializable;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-@Schema(description = "Respuesta con información integral del cliente y su cuenta bancaria")
+@Schema(description = "Respuesta integral con datos personales, domicilio, cuentas y usuario de acceso")
 public class ClienteResponse implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -20,7 +24,7 @@ public class ClienteResponse implements Serializable {
     @Schema(description = "Identificador único del cliente", example = "1")
     private Integer id;
 
-    @Schema(description = "Primer nombre", example = "Mariana")
+    @Schema(description = "Nombre", example = "Mariana")
     private String nombre;
 
     @Schema(description = "Segundo nombre", example = "Sofia")
@@ -44,45 +48,49 @@ public class ClienteResponse implements Serializable {
     @Schema(description = "RFC", example = "HETM9408228K4")
     private String rfc;
 
-    @Schema(description = "Teléfono de contacto", example = "5512345678")
-    private String telefono;
+    @Schema(description = "Sexo", example = "FEMENINO")
+    private String sexo;
+
+    @Schema(description = "Nacionalidad", example = "Mexicana")
+    private String nacionalidad;
+
+    @Schema(description = "Estado civil", example = "SOLTERO")
+    private String estadoCivil;
 
     @Schema(description = "Correo electrónico", example = "mariana.hernandez@example.com")
-    private String email;
+    private String correo;
 
-    @Schema(description = "Calle", example = "Av. Insurgentes Sur")
-    private String calle;
+    @Schema(description = "Teléfono móvil a 10 dígitos", example = "5512345678")
+    private String telefonoMovil;
 
-    @Schema(description = "Número exterior", example = "1200")
-    private String numeroExterior;
+    @Schema(description = "Teléfono alternativo", example = "5587654321")
+    private String telefonoAlternativo;
 
-    @Schema(description = "Colonia", example = "Del Valle")
-    private String colonia;
+    @Schema(description = "Domicilio asociado")
+    private DomicilioDTO domicilio;
 
-    @Schema(description = "Código postal", example = "03100")
-    private String codigoPostal;
+    @Schema(description = "Ocupación laboral", example = "Ingeniera de Software")
+    private String ocupacion;
 
-    @Schema(description = "Ciudad", example = "Ciudad de México")
-    private String ciudad;
+    @Schema(description = "Empresa", example = "Tecnologías Financieras S.A.")
+    private String empresa;
 
-    @Schema(description = "Estado", example = "CDMX")
-    private String estado;
-
-    @Schema(description = "Puesto laboral", example = "Desarrollador de Software")
-    private String puestoLaboral;
-
-    @Schema(description = "Ingreso mensual", example = "35000.00")
+    @Schema(description = "Ingreso mensual", example = "45000.00")
     private BigDecimal ingresoMensual;
 
     @Schema(description = "Estatus activo del cliente", example = "true")
     private Boolean activo;
 
-    @Schema(description = "Fecha de registro", example = "2026-10-06T18:30:00")
+    @Schema(description = "Fecha de creación del registro", example = "2026-10-06T19:00:00")
     private LocalDateTime fechaCreacion;
 
-    @Schema(description = "Fecha de última modificación", example = "2026-10-06T18:30:00")
+    @Schema(description = "Fecha de última modificación", example = "2026-10-06T19:00:00")
     private LocalDateTime fechaActualizacion;
 
-    @Schema(description = "Cuenta bancaria vinculada")
-    private CuentaBancariaResponse cuentaBancaria;
+    @Schema(description = "Lista de cuentas bancarias asociadas al cliente")
+    @Builder.Default
+    private List<CuentaResponse> cuentas = new ArrayList<>();
+
+    @Schema(description = "Usuario de acceso al sistema (sin password)")
+    private UsuarioResponse usuario;
 }
