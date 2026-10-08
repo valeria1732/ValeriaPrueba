@@ -23,6 +23,8 @@ public class OpenApi {
                         .version("1.0")
                         .description("Documentación interactiva de microservicios: Clientes, Cuentas Bancarias y Productos"))
                 .servers(List.of(
+                        new Server().url("/").description("Servidor Actual"),
+                        new Server().url("https://gestopago-app.onrender.com").description("Servidor Render (Producción)"),
                         new Server().url("http://localhost:" + serverPort).description("Servidor Local")
                 ));
     }
