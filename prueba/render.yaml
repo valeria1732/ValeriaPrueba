@@ -1,0 +1,69 @@
+services:
+  # Servicio Web de Spring Boot
+  - type: web
+    name: gestopago-app
+    runtime: docker
+    rootDir: prueba
+    dockerfilePath: Dockerfile
+    plan: free
+    healthCheckPath: /actuator/health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: gestopago-db
+          property: connectionString
+      - key: DB_HOST
+        fromDatabase:
+          name: gestopago-db
+          property: host
+      - key: DB_PORT
+        fromDatabase:
+          name: gestopago-db
+          property: port
+      - key: DB_NAME
+        fromDatabase:
+          name: gestopago-db
+          property: database
+      - key: DB_USER
+        fromDatabase:
+          name: gestopago-db
+          property: user
+      - key: DB_PASSWORD
+        fromDatabase:
+          name: gestopago-db
+          property: password
+      - key: REDIS_HOST
+        fromService:
+          type: keyvalue
+          name: gestopago-redis
+          property: host
+      - key: REDIS_PORT
+        fromService:
+          type: keyvalue
+          name: gestopago-redis
+          property: port
+      - key: GESTOPAGO_AUTH_URL
+        value: https://gestopago.portalgp.com
+      - key: GESTOPAGO_PRODUCT_URL
+        value: https://gestopago.portalgp.com
+      - key: GESTOPAGO_ID_DISTRIBUIDOR
+        value: "1001"
+      - key: GESTOPAGO_CODIGO_DISPOSITIVO
+        value: DEV_TEST_001
+      - key: GESTOPAGO_PASSWORD
+        value: secret_password
+      - key: GESTOPAGO_PRODUCT_TOKEN
+        value: default_bearer_token
+
+  # Instancia Redis / Key-Value
+  - type: keyvalue
+    name: gestopago-redis
+    plan: free
+    ipAllowList: []
+
+databases:
+  # Base de Datos PostgreSQL
+  - name: gestopago-db
+    databaseName: gestopago_db
+    user: postgres
+    plan: free
