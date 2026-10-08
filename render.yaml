@@ -65,5 +65,5 @@ databases:
   # Base de Datos PostgreSQL
   - name: gestopago-db
     databaseName: gestopago_db
-    user: postgres
+    user: gestopago_user
     plan: free
