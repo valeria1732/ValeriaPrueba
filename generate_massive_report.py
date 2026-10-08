@@ -598,6 +598,23 @@ BUILD SUCCESSFUL in 29s
     )
 
     add_h2("13.1. Prueba E2E: GET /actuator/health (Sondas de Salud)")
+    # Inserción de la captura real de terminal 1
+    if os.path.exists("terminal_captura_real_1.png"):
+        p_img1 = doc.add_paragraph()
+        p_img1.paragraph_format.space_before = Pt(8)
+        p_img1.paragraph_format.space_after = Pt(8)
+        p_img1.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_img1 = p_img1.add_run()
+        r_img1.add_picture("terminal_captura_real_1.png", width=Inches(6.2))
+        p_cap1 = doc.add_paragraph()
+        p_cap1.paragraph_format.space_after = Pt(10)
+        p_cap1.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_cap1 = p_cap1.add_run("Figura 1: Captura real de terminal ejecutando Actuator Health y consultas iniciales en Render.")
+        r_cap1.font.name = "Arial"
+        r_cap1.font.size = Pt(9.5)
+        r_cap1.font.italic = True
+        r_cap1.font.color.rgb = RGBColor(100, 100, 100)
+
     add_terminal("CURL: GET /ACTUATOR/HEALTH",
 """$ curl.exe -s -i https://gestopago-app.onrender.com/actuator/health
 
@@ -622,6 +639,22 @@ Content-Type: application/json
 """)
 
     add_h2("13.3. Prueba E2E: POST /clientes Registro Exitoso Integral (HTTP 201)")
+    # Inserción de la captura real de terminal 2
+    if os.path.exists("terminal_captura_real_2.png"):
+        p_img2 = doc.add_paragraph()
+        p_img2.paragraph_format.space_before = Pt(8)
+        p_img2.paragraph_format.space_after = Pt(8)
+        p_img2.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_img2 = p_img2.add_run()
+        r_img2.add_picture("terminal_captura_real_2.png", width=Inches(6.2))
+        p_cap2 = doc.add_paragraph()
+        p_cap2.paragraph_format.space_after = Pt(10)
+        p_cap2.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_cap2 = p_cap2.add_run("Figura 2: Captura real de terminal ejecutando el registro completo de cliente y autenticación JWT Bearer en Render.")
+        r_cap2.font.name = "Arial"
+        r_cap2.font.size = Pt(9.5)
+        r_cap2.font.italic = True
+        r_cap2.font.color.rgb = RGBColor(100, 100, 100)
     add_terminal("CURL: POST /CLIENTES (CREACIÓN EXITOSA DE CLIENTE, CUENTA Y USUARIO)",
 """$ curl.exe -s -i -X POST "https://gestopago-app.onrender.com/clientes" \\
   -H "Content-Type: application/json" \\
@@ -712,6 +745,22 @@ Content-Type: application/json
 """)
 
     add_h2("13.8. Prueba E2E: DELETE /productos/cache Desalojo de Caché Redis")
+    if os.path.exists("terminal_captura_real_3.png"):
+        p_img3 = doc.add_paragraph()
+        p_img3.paragraph_format.space_before = Pt(8)
+        p_img3.paragraph_format.space_after = Pt(8)
+        p_img3.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_img3 = p_img3.add_run()
+        r_img3.add_picture("terminal_captura_real_3.png", width=Inches(6.2))
+        p_cap3 = doc.add_paragraph()
+        p_cap3.paragraph_format.space_after = Pt(10)
+        p_cap3.paragraph_format.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        r_cap3 = p_cap3.add_run("Figura 3: Captura real de terminal ejecutando pruebas de validación 400 Bad Request, 409 Conflict y desalojo de caché en Redis.")
+        r_cap3.font.name = "Arial"
+        r_cap3.font.size = Pt(9.5)
+        r_cap3.font.italic = True
+        r_cap3.font.color.rgb = RGBColor(100, 100, 100)
+
     add_terminal("CURL: DELETE /PRODUCTOS/CACHE",
 """$ curl.exe -s -i -X DELETE "https://gestopago-app.onrender.com/productos/cache"
 

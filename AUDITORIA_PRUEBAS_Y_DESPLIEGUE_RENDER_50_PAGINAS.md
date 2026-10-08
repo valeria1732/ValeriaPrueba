@@ -293,6 +293,8 @@ A continuación se documentan las pruebas reales efectuadas contra la URL de pro
 
 13.1. Prueba E2E: GET /actuator/health (Sondas de Salud)
 
+Figura 1: Captura real de terminal ejecutando Actuator Health y consultas iniciales en Render.
+
 
 #### [REGISTRO LITERAL DE TERMINAL] CURL: GET /ACTUATOR/HEALTH
 
@@ -326,6 +328,8 @@ Content-Type: application/json
 `
 
 13.3. Prueba E2E: POST /clientes Registro Exitoso Integral (HTTP 201)
+
+Figura 2: Captura real de terminal ejecutando el registro completo de cliente y autenticación JWT Bearer en Render.
 
 
 #### [REGISTRO LITERAL DE TERMINAL] CURL: POST /CLIENTES (CREACIÓN EXITOSA DE CLIENTE, CUENTA Y USUARIO)
@@ -441,6 +445,8 @@ Content-Type: application/json
 `
 
 13.8. Prueba E2E: DELETE /productos/cache Desalojo de Caché Redis
+
+Figura 3: Captura real de terminal ejecutando pruebas de validación 400 Bad Request, 409 Conflict y desalojo de caché en Redis.
 
 
 #### [REGISTRO LITERAL DE TERMINAL] CURL: DELETE /PRODUCTOS/CACHE
