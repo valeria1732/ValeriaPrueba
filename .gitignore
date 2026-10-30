@@ -1,0 +1,13 @@
+# Documentos Word y reportes generados
+*.doc
+*.docx
+~$*.doc
+~$*.docx
+AUDITORIA_PRUEBAS_Y_DESPLIEGUE_RENDER_50_PAGINAS.*
+DOCUMENTO_TECNICO_PRUEBAS_Y_DESPLIEGUE_RENDER.*
+PROYECTO_FINAL_SISTEMA_FINANCIERO_40_HOJAS.*
+test_calib.docx
+dossier_builder/
+*.py
+*.png
+sample_*.json
