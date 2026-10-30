@@ -46,14 +46,20 @@ services:
         value: https://gestopago.portalgp.com
       - key: GESTOPAGO_PRODUCT_URL
         value: https://gestopago.portalgp.com
+      - key: GESTOPAGO_TRANSACTION_URL
+        value: https://gestopago.portalventas.net
       - key: GESTOPAGO_ID_DISTRIBUIDOR
         value: "1001"
       - key: GESTOPAGO_CODIGO_DISPOSITIVO
         value: DEV_TEST_001
-      - key: GESTOPAGO_PASSWORD
-        value: secret_password
-      - key: GESTOPAGO_PRODUCT_TOKEN
-        value: default_bearer_token
+      - key: GESTOPAGO_AUTH_PASSWORD
+        generateValue: true
+      - key: GESTOPAGO_BEARER_TOKEN
+        generateValue: true
+      - key: GESTOPAGO_AES_KEY
+        value: GestoPagoAESSecretKey2026Secure32
+      - key: APP_JWT_SECRET
+        generateValue: true
 
   # Instancia Redis / Key-Value
   - type: keyvalue
