@@ -1,17 +1,23 @@
 package com.proyecto.servicios.model;
 
-import jakarta.persistence.Column;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.Builder;
 
-@Getter
-@Setter
-@NoArgsConstructor
-public class PersonasRequest {
+import java.io.Serializable;
 
-    private String nombre;
-    private String apellidoP;
-    private String apellidoMaterno;
+@Builder
+public record PersonasRequest(
+        String nombre,
+        String apellidoP,
+        String apellidoMaterno
+) implements Serializable {
 
+    public PersonasRequest {
+        if (nombre == null || nombre.isBlank()) {
+            throw new IllegalArgumentException("El nombre es obligatorio");
+        }
+    }
+
+    public String getNombre() { return nombre; }
+    public String getApellidoP() { return apellidoP; }
+    public String getApellidoMaterno() { return apellidoMaterno; }
 }

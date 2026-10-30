@@ -1,12 +1,19 @@
 package com.proyecto.servicios.model;
 
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.Builder;
 
-@Getter
-@Setter
-@NoArgsConstructor
-public class EliminaPersonaRequest {
-    private String nombre;
+import java.io.Serializable;
+
+@Builder
+public record EliminaPersonaRequest(
+        String nombre
+) implements Serializable {
+
+    public EliminaPersonaRequest {
+        if (nombre == null || nombre.isBlank()) {
+            throw new IllegalArgumentException("El nombre es obligatorio");
+        }
+    }
+
+    public String getNombre() { return nombre; }
 }

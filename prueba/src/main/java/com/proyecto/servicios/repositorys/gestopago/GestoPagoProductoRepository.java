@@ -10,4 +10,6 @@ import java.util.Optional;
 public interface GestoPagoProductoRepository extends JpaRepository<GestoPagoProductoEntity, Integer> {
 
     Optional<GestoPagoProductoEntity> findByCodigo(String codigo);
+
+    Optional<GestoPagoProductoEntity> findByIdProducto(Integer idProducto);
 }

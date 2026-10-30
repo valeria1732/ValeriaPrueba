@@ -31,21 +31,25 @@ public class UsuarioController {
         this.usuarioService = usuarioService;
     }
 
-    @Operation(summary = "Consultar usuarios aplicando filtros opcionales")
+    @Operation(summary = "Consultar usuarios aplicando filtros opcionales de forma paginada")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Lista de usuarios obtenida exitosamente")
+            @ApiResponse(responseCode = "200", description = "Respuesta paginada de usuarios obtenida exitosamente")
     })
     @GetMapping(
             value = "/filtro",
             produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public ResponseEntity<List<UsuarioResponse>> consultarFiltro(
+    public ResponseEntity<com.proyecto.servicios.model.PageResponse<UsuarioResponse>> consultarFiltro(
             @Parameter(description = "Filtro por correo electrónico", example = "mariana.hernandez@example.com")
             @RequestParam(name = "correo", required = false) String correo,
             @Parameter(description = "Filtro por estatus de activación", example = "true")
-            @RequestParam(name = "activo", required = false) Boolean activo) {
-        log.info("Petición recibida en GET /usuarios/filtro con correo: {}, activo: {}", correo, activo);
-        List<UsuarioResponse> usuarios = usuarioService.consultarUsuariosConFiltro(correo, activo);
+            @RequestParam(name = "activo", required = false) Boolean activo,
+            @Parameter(description = "Número de página (iniciando en 0)", example = "0")
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @Parameter(description = "Tamaño de elementos por página", example = "10")
+            @RequestParam(name = "size", defaultValue = "10") int size) {
+        log.info("Petición recibida en GET /usuarios/filtro con correo: {}, activo: {}, page: {}, size: {}", correo, activo, page, size);
+        com.proyecto.servicios.model.PageResponse<UsuarioResponse> usuarios = usuarioService.consultarUsuariosConFiltroPaginados(correo, activo, page, size);
         return ResponseEntity.ok(usuarios);
     }
 

@@ -88,6 +88,35 @@ public class CuentaServiceImpl implements CuentaService {
 
     @Override
     @Transactional(readOnly = true)
+    public com.proyecto.servicios.model.PageResponse<CuentaResponse> consultarCuentasPaginadas(
+            Integer clienteId, String estatus, int page, int size) {
+        log.info("Consultando cuentas paginadas - clienteId: {}, estatus: {}, page: {}, size: {}",
+                clienteId, estatus, page, size);
+        int safePage = Math.max(page, 0);
+        int safeSize = size > 0 ? size : 10;
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(safePage, safeSize);
+
+        org.springframework.data.domain.Page<CuentaEntity> pageResult;
+
+        if (clienteId != null && StringUtils.isNotBlank(estatus)) {
+            pageResult = cuentaRepository.findByClienteIdAndEstatus(clienteId, estatus.trim().toUpperCase(), pageable);
+        } else if (clienteId != null) {
+            pageResult = cuentaRepository.findByClienteId(clienteId, pageable);
+        } else if (StringUtils.isNotBlank(estatus)) {
+            pageResult = cuentaRepository.findByEstatus(estatus.trim().toUpperCase(), pageable);
+        } else {
+            pageResult = cuentaRepository.findAll(pageable);
+        }
+
+        List<CuentaResponse> content = pageResult.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return com.proyecto.servicios.model.PageResponse.of(content, pageResult.getNumber(), pageResult.getSize(), pageResult.getTotalElements());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public List<CuentaResponse> consultarPorClienteId(Integer clienteId) {
         log.info("Consultando cuentas bancarias para cliente ID: {}", clienteId);
         if (!clienteRepository.existsById(clienteId)) {

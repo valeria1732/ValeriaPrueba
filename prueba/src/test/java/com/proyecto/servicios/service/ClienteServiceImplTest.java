@@ -227,13 +227,29 @@ class ClienteServiceImplTest {
     @Test
     @DisplayName("Debe lanzar ClienteBusinessException si el cliente es menor de edad")
     void testRegistrarCliente_MenorDeEdad() {
-        registroRequest.setFechaNacimiento(LocalDate.now().minusYears(17));
-        when(clienteRepository.existsByCurp(anyString())).thenReturn(false);
-        when(clienteRepository.existsByRfc(anyString())).thenReturn(false);
-        when(clienteRepository.existsByCorreo(anyString())).thenReturn(false);
-
-        ClienteBusinessException ex = assertThrows(ClienteBusinessException.class,
-                () -> clienteService.registrarCliente(registroRequest));
+        ClienteBusinessException ex = assertThrows(ClienteBusinessException.class, () -> {
+            ClienteRegistroRequest menor = ClienteRegistroRequest.builder()
+                    .nombre("Mariana")
+                    .segundoNombre("Sofia")
+                    .apellidoPaterno("Hernandez")
+                    .apellidoMaterno("Torres")
+                    .fechaNacimiento(LocalDate.now().minusYears(17))
+                    .curp("HETM940822MDFRRN03")
+                    .rfc("HETM9408228K4")
+                    .sexo("FEMENINO")
+                    .nacionalidad("Mexicana")
+                    .estadoCivil("SOLTERO")
+                    .correo("mariana.hernandez@example.com")
+                    .telefonoMovil("5512345678")
+                    .domicilio(registroRequest.getDomicilio())
+                    .ocupacion("Desarrollador de Software")
+                    .empresa("Fintech S.A.")
+                    .ingresoMensual(new BigDecimal("35000.00"))
+                    .password("Segura123!")
+                    .saldoInicial(new BigDecimal("1000.00"))
+                    .build();
+            clienteService.registrarCliente(menor);
+        });
         assertTrue(ex.getMessage().contains("mayor de edad"));
     }
 

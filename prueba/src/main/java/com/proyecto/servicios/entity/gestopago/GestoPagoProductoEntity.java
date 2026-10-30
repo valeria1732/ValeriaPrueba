@@ -22,6 +22,9 @@ public class GestoPagoProductoEntity {
     @Column(name = "id_producto")
     private Integer idProducto;
 
+    @Column(name = "id_servicio")
+    private Integer idServicio;
+
     @Column(name = "codigo", nullable = false, unique = true, length = 100)
     private String codigo;
 

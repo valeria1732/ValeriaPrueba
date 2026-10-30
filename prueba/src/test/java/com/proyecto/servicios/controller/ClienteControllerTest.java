@@ -167,14 +167,19 @@ class ClienteControllerTest {
     }
 
     @Test
-    @DisplayName("GET /clientes debe responder 200 OK con la lista de clientes")
+    @DisplayName("GET /clientes debe responder 200 OK con respuesta paginada de clientes")
     void testConsultarClientes_200_OK() throws Exception {
-        when(clienteService.consultarClientes(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-                .thenReturn(List.of(mockResponse));
+        com.proyecto.servicios.model.PageResponse<ClienteResponse> pageResponse =
+                com.proyecto.servicios.model.PageResponse.of(List.of(mockResponse), 0, 10, 1);
+        when(clienteService.consultarClientesPaginados(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                .thenReturn(pageResponse);
 
-        mockMvc.perform(get("/clientes?nombre=Mariana"))
+        mockMvc.perform(get("/clientes?nombre=Mariana&page=0&size=10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].nombre").value("Mariana"));
+                .andExpect(jsonPath("$.contenido[0].nombre").value("Mariana"))
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamanoPagina").value(10))
+                .andExpect(jsonPath("$.totalElementos").value(1));
     }
 
     @Test

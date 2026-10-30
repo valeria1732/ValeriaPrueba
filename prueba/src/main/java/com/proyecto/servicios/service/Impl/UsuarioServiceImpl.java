@@ -119,10 +119,24 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<UsuarioResponse> consultarUsuariosConFiltro(String correo, Boolean activo) {
-        log.info("Consultando usuarios con filtro correo: {}, activo: {}", correo, activo);
+    public com.proyecto.servicios.model.PageResponse<UsuarioResponse> consultarUsuariosConFiltroPaginados(String correo, Boolean activo, int page, int size) {
+        log.info("Consultando usuarios paginados con filtro correo: {}, activo: {}, page: {}, size: {}", correo, activo, page, size);
+        int safePage = Math.max(page, 0);
+        int safeSize = size > 0 ? size : 10;
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(safePage, safeSize);
 
-        Specification<UsuarioEntity> spec = (root, query, cb) -> {
+        Specification<UsuarioEntity> spec = createUsuarioSpec(correo, activo);
+        org.springframework.data.domain.Page<UsuarioEntity> pageResult = usuarioRepository.findAll(spec, pageable);
+
+        List<UsuarioResponse> content = pageResult.getContent().stream()
+                .map(this::mapToResponse)
+                .collect(Collectors.toList());
+
+        return com.proyecto.servicios.model.PageResponse.of(content, pageResult.getNumber(), pageResult.getSize(), pageResult.getTotalElements());
+    }
+
+    private Specification<UsuarioEntity> createUsuarioSpec(String correo, Boolean activo) {
+        return (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
 
             if (StringUtils.isNotBlank(correo)) {
@@ -134,6 +148,13 @@ public class UsuarioServiceImpl implements UsuarioService {
 
             return cb.and(predicates.toArray(new Predicate[0]));
         };
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<UsuarioResponse> consultarUsuariosConFiltro(String correo, Boolean activo) {
+        log.info("Consultando usuarios con filtro correo: {}, activo: {}", correo, activo);
+        Specification<UsuarioEntity> spec = createUsuarioSpec(correo, activo);
 
         return usuarioRepository.findAll(spec).stream()
                 .map(this::mapToResponse)

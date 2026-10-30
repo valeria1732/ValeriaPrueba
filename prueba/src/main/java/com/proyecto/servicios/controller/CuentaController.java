@@ -52,31 +52,26 @@ public class CuentaController {
         return new ResponseEntity<>(response, HttpStatus.CREATED);
     }
 
-    @Operation(summary = "Consultar cuentas asociadas a un cliente o filtradas por estatus")
+    @Operation(summary = "Consultar cuentas asociadas a un cliente o filtradas por estatus de forma paginada")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Lista de cuentas obtenida exitosamente"),
+            @ApiResponse(responseCode = "200", description = "Respuesta paginada de cuentas obtenida exitosamente"),
             @ApiResponse(responseCode = "404", description = "Cliente no encontrado al filtrar por clienteId")
     })
     @GetMapping(
             produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public ResponseEntity<List<CuentaResponse>> consultarCuentas(
+    public ResponseEntity<com.proyecto.servicios.model.PageResponse<CuentaResponse>> consultarCuentas(
             @Parameter(description = "Identificador del cliente", example = "1")
             @RequestParam(name = "clienteId", required = false) Integer clienteId,
             @Parameter(description = "Estatus de la cuenta (ACTIVA, INACTIVA, etc.)", example = "ACTIVA")
-            @RequestParam(name = "estatus", required = false) String estatus) {
-        log.info("Petición recibida en GET /cuentas con clienteId: {}, estatus: {}", clienteId, estatus);
-
-        if (clienteId != null) {
-            return ResponseEntity.ok(cuentaService.consultarPorClienteId(clienteId));
-        }
-
-        if (estatus != null && !estatus.trim().isEmpty()) {
-            return ResponseEntity.ok(cuentaService.consultarPorEstatus(estatus));
-        }
-
-        // Si no se especifica filtro, devuelve cuentas activas por defecto
-        return ResponseEntity.ok(cuentaService.consultarPorEstatus("ACTIVA"));
+            @RequestParam(name = "estatus", required = false) String estatus,
+            @Parameter(description = "Número de página (iniciando en 0)", example = "0")
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @Parameter(description = "Tamaño de elementos por página", example = "10")
+            @RequestParam(name = "size", defaultValue = "10") int size) {
+        log.info("Petición recibida en GET /cuentas con clienteId: {}, estatus: {}, page: {}, size: {}", clienteId, estatus, page, size);
+        com.proyecto.servicios.model.PageResponse<CuentaResponse> response = cuentaService.consultarCuentasPaginadas(clienteId, estatus, page, size);
+        return ResponseEntity.ok(response);
     }
 
     @Operation(summary = "Consultar una cuenta por número de cuenta")

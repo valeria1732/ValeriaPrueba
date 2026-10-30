@@ -21,8 +21,7 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import java.math.BigDecimal;
 import java.util.List;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -109,13 +108,19 @@ class CuentaControllerTest {
     }
 
     @Test
-    @DisplayName("GET /cuentas?clienteId=1 debe responder 200 OK con las cuentas del cliente")
+    @DisplayName("GET /cuentas?clienteId=1 debe responder 200 OK con respuesta paginada de cuentas del cliente")
     void testConsultarCuentasPorClienteId_200_OK() throws Exception {
-        when(cuentaService.consultarPorClienteId(1)).thenReturn(List.of(mockCuentaResponse));
+        com.proyecto.servicios.model.PageResponse<CuentaResponse> pageResponse =
+                com.proyecto.servicios.model.PageResponse.of(List.of(mockCuentaResponse), 0, 10, 1);
+        when(cuentaService.consultarCuentasPaginadas(eq(1), isNull(), anyInt(), anyInt()))
+                .thenReturn(pageResponse);
 
-        mockMvc.perform(get("/cuentas?clienteId=1"))
+        mockMvc.perform(get("/cuentas?clienteId=1&page=0&size=10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].numeroCuenta").value("1234567890"));
+                .andExpect(jsonPath("$.contenido[0].numeroCuenta").value("1234567890"))
+                .andExpect(jsonPath("$.pagina").value(0))
+                .andExpect(jsonPath("$.tamanoPagina").value(10))
+                .andExpect(jsonPath("$.totalElementos").value(1));
     }
 
     @Test

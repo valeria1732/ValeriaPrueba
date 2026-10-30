@@ -71,14 +71,14 @@ public class ClienteController {
         return ResponseEntity.ok(response);
     }
 
-    @Operation(summary = "Consultar clientes con filtros opcionales (nombre, apellidos, CURP, RFC, correo, activo, rango de fechas)")
+    @Operation(summary = "Consultar clientes paginados con filtros opcionales (nombre, apellidos, CURP, RFC, correo, activo, rango de fechas, página y tamaño)")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Lista de clientes que coinciden con los criterios de búsqueda")
+            @ApiResponse(responseCode = "200", description = "Respuesta paginada de clientes que coinciden con los criterios de búsqueda")
     })
     @GetMapping(
             produces = MediaType.APPLICATION_JSON_VALUE
     )
-    public ResponseEntity<List<ClienteResponse>> consultarClientes(
+    public ResponseEntity<com.proyecto.servicios.model.PageResponse<ClienteResponse>> consultarClientes(
             @Parameter(description = "Filtrar por coincidencia en nombre")
             @RequestParam(name = "nombre", required = false) String nombre,
             @Parameter(description = "Filtrar por coincidencia en apellido paterno")
@@ -96,11 +96,15 @@ public class ClienteController {
             @Parameter(description = "Fecha inicial de registro (YYYY-MM-DD)", example = "2026-01-01")
             @RequestParam(name = "fechaInicio", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaInicio,
             @Parameter(description = "Fecha final de registro (YYYY-MM-DD)", example = "2026-12-31")
-            @RequestParam(name = "fechaFin", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin) {
-        log.info("Petición recibida en GET /clientes con filtros - nombre: {}, apellidoPaterno: {}, curp: {}, rfc: {}, correo: {}, activo: {}",
-                nombre, apellidoPaterno, curp, rfc, correo, activo);
-        List<ClienteResponse> clientes = clienteService.consultarClientes(
-                nombre, apellidoPaterno, apellidoMaterno, curp, rfc, correo, activo, fechaInicio, fechaFin
+            @RequestParam(name = "fechaFin", required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fechaFin,
+            @Parameter(description = "Número de página (iniciando en 0)", example = "0")
+            @RequestParam(name = "page", defaultValue = "0") int page,
+            @Parameter(description = "Tamaño de elementos por página", example = "10")
+            @RequestParam(name = "size", defaultValue = "10") int size) {
+        log.info("Petición recibida en GET /clientes con filtros - nombre: {}, curp: {}, page: {}, size: {}",
+                nombre, curp, page, size);
+        com.proyecto.servicios.model.PageResponse<ClienteResponse> clientes = clienteService.consultarClientesPaginados(
+                nombre, apellidoPaterno, apellidoMaterno, curp, rfc, correo, activo, fechaInicio, fechaFin, page, size
         );
         return ResponseEntity.ok(clientes);
     }

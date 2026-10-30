@@ -1,5 +1,6 @@
 package com.proyecto.servicios.service;
 
+import com.proyecto.servicios.model.PageResponse;
 import com.proyecto.servicios.model.cliente.ClienteActualizaRequest;
 import com.proyecto.servicios.model.cliente.ClientePatchRequest;
 import com.proyecto.servicios.model.cliente.ClienteRegistroRequest;
@@ -21,6 +22,20 @@ public interface ClienteService {
     ClienteResponse consultarPorCorreo(String correo);
 
     ClienteResponse consultarPorNumeroCuenta(String numeroCuenta);
+
+    PageResponse<ClienteResponse> consultarClientesPaginados(
+            String nombre,
+            String apellidoPaterno,
+            String apellidoMaterno,
+            String curp,
+            String rfc,
+            String correo,
+            Boolean activo,
+            LocalDate fechaInicio,
+            LocalDate fechaFin,
+            int page,
+            int size
+    );
 
     List<ClienteResponse> consultarClientes(
             String nombre,
