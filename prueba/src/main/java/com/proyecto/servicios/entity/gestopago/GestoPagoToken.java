@@ -1,8 +1,10 @@
 package com.proyecto.servicios.entity.gestopago;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
@@ -10,6 +12,7 @@ import java.time.LocalDateTime;
 @Table(name = "gestopago_tokens")
 @Getter
 @Setter
+@ToString
 public class GestoPagoToken {
 
     @Id
@@ -22,6 +25,8 @@ public class GestoPagoToken {
     @Column(name = "codigo_dispositivo", nullable = false, length = 100)
     private String codigoDispositivo;
 
+    @JsonIgnore
+    @ToString.Exclude
     @Column(name = "token", nullable = false, columnDefinition = "TEXT")
     private String token;
 

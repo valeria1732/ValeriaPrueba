@@ -57,7 +57,7 @@ services:
       - key: GESTOPAGO_BEARER_TOKEN
         generateValue: true
       - key: GESTOPAGO_AES_KEY
-        value: GestoPagoAESSecretKey2026Secure32
+        generateValue: true
       - key: APP_JWT_SECRET
         generateValue: true
 

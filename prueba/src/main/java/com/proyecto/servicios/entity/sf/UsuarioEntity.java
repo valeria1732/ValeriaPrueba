@@ -1,6 +1,7 @@
 package com.proyecto.servicios.entity.sf;
 
 import com.fasterxml.jackson.annotation.JsonBackReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -30,6 +31,8 @@ public class UsuarioEntity implements Serializable {
     @Column(name = "correo", nullable = false, unique = true, length = 100)
     private String correo;
 
+    @JsonIgnore
+    @ToString.Exclude
     @Column(name = "password", nullable = false, length = 255)
     private String password;
 

@@ -3,6 +3,7 @@ package com.proyecto.servicios.exception;
 import com.proyecto.servicios.model.GenericResponse;
 import feign.FeignException;
 import feign.RetryableException;
+import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.CannotAcquireLockException;
@@ -10,6 +11,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -20,68 +22,43 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 public class GlobalExceptionHandler {
 
     @ExceptionHandler(TransaccionPendienteConciliacionException.class)
-    public ResponseEntity<GenericResponse> handleTransaccionPendienteConciliacion(TransaccionPendienteConciliacionException ex) {
-        log.error("Transacción en estado indeterminado (PENDIENTE_CONCILIACION). Folio={}: {}",
-                ex.getFolioInterno(), sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.GATEWAY_TIMEOUT.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body(response);
+    public ResponseEntity<GenericResponse> handlePendienteConciliacion(TransaccionPendienteConciliacionException ex) {
+        log.error("Transacción PENDIENTE_CONCILIACION (Folio={}): {}", ex.getFolioInterno(), sanitizar(ex.getMessage()));
+        return build(HttpStatus.GATEWAY_TIMEOUT, ex.getMessage());
     }
 
     @ExceptionHandler(GestoPagoAuthException.class)
-    public ResponseEntity<GenericResponse> handleGestoPagoAuthException(GestoPagoAuthException ex) {
-        log.error("Error de autenticación en servicio externo: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.UNAUTHORIZED.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    public ResponseEntity<GenericResponse> handleGestoPagoAuth(GestoPagoAuthException ex) {
+        log.error("Error de autenticación en servicio externo: {}", sanitizar(ex.getMessage()));
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
-    @ExceptionHandler(GestoPagoTimeoutException.class)
-    public ResponseEntity<GenericResponse> handleGestoPagoTimeoutException(GestoPagoTimeoutException ex) {
-        log.error("Timeout al comunicar con servicio externo: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.GATEWAY_TIMEOUT.value());
-        response.setMensaje("Tiempo de espera agotado al conectar con el servicio externo");
-        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body(response);
+    @ExceptionHandler({GestoPagoTimeoutException.class, RetryableException.class})
+    public ResponseEntity<GenericResponse> handleTimeouts(Exception ex) {
+        log.error("Timeout al comunicar con servicio externo: {}", sanitizar(ex.getMessage()));
+        return build(HttpStatus.GATEWAY_TIMEOUT, "Tiempo de espera agotado al conectar con el servicio externo");
     }
 
     @ExceptionHandler(GestoPagoIntegrationException.class)
-    public ResponseEntity<GenericResponse> handleGestoPagoIntegrationException(GestoPagoIntegrationException ex) {
-        log.error("Error de integración con servicio externo (código={}): {}", ex.getCodigo(), sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(ex.getCodigo() != null ? ex.getCodigo() : HttpStatus.BAD_GATEWAY.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(response);
-    }
-
-    @ExceptionHandler(RetryableException.class)
-    public ResponseEntity<GenericResponse> handleRetryableException(RetryableException ex) {
-        log.error("Error de conexión / timeout en cliente Feign: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.GATEWAY_TIMEOUT.value());
-        response.setMensaje("No fue posible establecer comunicación con el servicio externo (Timeout/Conexión)");
-        return ResponseEntity.status(HttpStatus.GATEWAY_TIMEOUT).body(response);
+    public ResponseEntity<GenericResponse> handleGestoPagoIntegration(GestoPagoIntegrationException ex) {
+        log.error("Error de integración externa (código={}): {}", ex.getCodigo(), sanitizar(ex.getMessage()));
+        int code = ex.getCodigo() != null ? ex.getCodigo() : HttpStatus.BAD_GATEWAY.value();
+        return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(new GenericResponse(code, sanitizar(ex.getMessage())));
     }
 
     @ExceptionHandler(FeignException.Unauthorized.class)
     public ResponseEntity<GenericResponse> handleFeignUnauthorized(FeignException.Unauthorized ex) {
-        log.error("Error 401 Unauthorized desde servicio externo Feign");
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.UNAUTHORIZED.value());
-        response.setMensaje("Credenciales o Bearer Token no autorizados para el servicio externo");
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+        log.error("Error 401 Unauthorized desde servicio externo");
+        return build(HttpStatus.UNAUTHORIZED, "Credenciales o Bearer Token no autorizados para el servicio externo");
     }
 
     @ExceptionHandler(FeignException.class)
     public ResponseEntity<GenericResponse> handleFeignException(FeignException ex) {
         log.error("Error en invocación Feign: status={}", ex.status());
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(ex.status() > 0 ? ex.status() : HttpStatus.BAD_GATEWAY.value());
-        response.setMensaje("Error al procesar la respuesta del servicio externo: " + ex.status());
         HttpStatus status = HttpStatus.resolve(ex.status());
-        return ResponseEntity.status(status != null ? status : HttpStatus.BAD_GATEWAY).body(response);
+        HttpStatus resolved = status != null ? status : HttpStatus.BAD_GATEWAY;
+        int code = ex.status() > 0 ? ex.status() : HttpStatus.BAD_GATEWAY.value();
+        return ResponseEntity.status(resolved).body(new GenericResponse(code, "Error al procesar la respuesta del servicio externo: " + ex.status()));
     }
 
     @ExceptionHandler({
@@ -90,34 +67,20 @@ public class GlobalExceptionHandler {
             CorreoDuplicadoException.class,
             TransaccionDuplicadaException.class
     })
-    public ResponseEntity<GenericResponse> handleDuplicadosException(RuntimeException ex) {
-        log.warn("Conflicto por duplicidad: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.CONFLICT.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    public ResponseEntity<GenericResponse> handleDuplicados(RuntimeException ex) {
+        log.warn("Conflicto por duplicidad: {}", sanitizar(ex.getMessage()));
+        return build(HttpStatus.CONFLICT, ex.getMessage());
     }
 
     @ExceptionHandler({
             PessimisticLockingFailureException.class,
             CannotAcquireLockException.class,
-            ObjectOptimisticLockingFailureException.class
+            ObjectOptimisticLockingFailureException.class,
+            DataIntegrityViolationException.class
     })
-    public ResponseEntity<GenericResponse> handleConcurrencyExceptions(Exception ex) {
-        log.warn("Conflicto de concurrencia detectado en transacción financiera: {}", ex.getClass().getSimpleName());
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.CONFLICT.value());
-        response.setMensaje("Se detectó una operación simultánea en curso sobre la cuenta. Por favor intente nuevamente.");
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
-    }
-
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<GenericResponse> handleDataIntegrityViolation(DataIntegrityViolationException ex) {
-        log.warn("Violación de integridad de datos o clave de idempotencia duplicada");
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.CONFLICT.value());
-        response.setMensaje("La solicitud ya fue registrada previamente o viola una restricción de unicidad");
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+    public ResponseEntity<GenericResponse> handleConcurrencyAndIntegrity(Exception ex) {
+        log.warn("Conflicto de concurrencia o unicidad: {}", ex.getClass().getSimpleName());
+        return build(HttpStatus.CONFLICT, "Operación simultánea o duplicada detectada sobre la cuenta. Intente nuevamente.");
     }
 
     @ExceptionHandler({
@@ -126,114 +89,70 @@ public class GlobalExceptionHandler {
             UsuarioNotFoundException.class,
             ProductoNoEncontradoException.class
     })
-    public ResponseEntity<GenericResponse> handleNotFoundExceptions(RuntimeException ex) {
-        log.warn("Recurso no encontrado: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.NOT_FOUND.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+    public ResponseEntity<GenericResponse> handleNotFound(RuntimeException ex) {
+        log.warn("Recurso no encontrado: {}", sanitizar(ex.getMessage()));
+        return build(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
-    @ExceptionHandler({
-            UsuarioInactivoException.class,
-            OperacionNoAutorizadaException.class
-    })
-    public ResponseEntity<GenericResponse> handleForbiddenExceptions(RuntimeException ex) {
-        log.warn("Operación no autorizada / acceso denegado: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.FORBIDDEN.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(response);
+    @ExceptionHandler({UsuarioInactivoException.class, OperacionNoAutorizadaException.class})
+    public ResponseEntity<GenericResponse> handleForbidden(RuntimeException ex) {
+        log.warn("Acceso denegado: {}", sanitizar(ex.getMessage()));
+        return build(HttpStatus.FORBIDDEN, ex.getMessage());
     }
 
     @ExceptionHandler(CredencialesInvalidasException.class)
-    public ResponseEntity<GenericResponse> handleCredencialesInvalidasException(CredencialesInvalidasException ex) {
-        log.warn("Credenciales inválidas: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.UNAUTHORIZED.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    public ResponseEntity<GenericResponse> handleCredencialesInvalidas(CredencialesInvalidasException ex) {
+        log.warn("Credenciales inválidas: {}", sanitizar(ex.getMessage()));
+        return build(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
     @ExceptionHandler({
             ContrasenaInvalidaException.class,
             MontoInvalidoException.class,
             SaldoInsuficienteException.class,
-            ClienteBusinessException.class
+            ClienteBusinessException.class,
+            IllegalArgumentException.class
     })
-    public ResponseEntity<GenericResponse> handleBusinessExceptions(RuntimeException ex) {
-        log.warn("Regla de negocio no cumplida: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.BAD_REQUEST.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    public ResponseEntity<GenericResponse> handleBadRequest(RuntimeException ex) {
+        log.warn("Validación o regla de negocio no cumplida: {}", sanitizar(ex.getMessage()));
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(ConstraintViolationException.class)
-    public ResponseEntity<GenericResponse> handleConstraintViolationException(ConstraintViolationException ex) {
-        log.warn("Violación de restricciones en parámetros de entrada");
-        String mensaje = ex.getConstraintViolations().stream()
-                .findFirst()
-                .map(v -> v.getMessage())
-                .orElse("Parámetros de entrada inválidos");
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.BAD_REQUEST.value());
-        response.setMensaje(sanitizarMensaje(mensaje));
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    public ResponseEntity<GenericResponse> handleConstraintViolation(ConstraintViolationException ex) {
+        String msg = ex.getConstraintViolations().stream()
+                .findFirst().map(ConstraintViolation::getMessage).orElse("Parámetros de entrada inválidos");
+        return build(HttpStatus.BAD_REQUEST, msg);
     }
 
-    @ExceptionHandler(IllegalArgumentException.class)
-    public ResponseEntity<GenericResponse> handleIllegalArgumentException(IllegalArgumentException ex) {
-        log.warn("Validación fallida en petición: {}", sanitizarMensaje(ex.getMessage()));
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.BAD_REQUEST.value());
-        response.setMensaje(sanitizarMensaje(ex.getMessage()));
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-    }
-
-    @ExceptionHandler(org.springframework.http.converter.HttpMessageNotReadableException.class)
-    public ResponseEntity<GenericResponse> handleHttpMessageNotReadable(org.springframework.http.converter.HttpMessageNotReadableException ex) {
-        log.warn("Error al deserializar petición o validación de formato");
-        Throwable rootCause = ex.getMostSpecificCause();
-        String mensaje = (rootCause != null && rootCause.getMessage() != null && rootCause instanceof IllegalArgumentException)
-                ? rootCause.getMessage()
-                : "Formato o datos de petición inválidos";
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.BAD_REQUEST.value());
-        response.setMensaje(sanitizarMensaje(mensaje));
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<GenericResponse> handleNotReadable(HttpMessageNotReadableException ex) {
+        Throwable root = ex.getMostSpecificCause();
+        String msg = (root instanceof IllegalArgumentException && root.getMessage() != null)
+                ? root.getMessage() : "Formato o datos de petición inválidos";
+        return build(HttpStatus.BAD_REQUEST, msg);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<GenericResponse> handleValidationException(MethodArgumentNotValidException ex) {
-        log.warn("Error de validación de petición en campos de entrada");
-        String primerError = ex.getBindingResult().getFieldErrors().stream()
-                .findFirst()
-                .map(error -> error.getField() + ": " + error.getDefaultMessage())
+    public ResponseEntity<GenericResponse> handleValidation(MethodArgumentNotValidException ex) {
+        String msg = ex.getBindingResult().getFieldErrors().stream()
+                .findFirst().map(e -> e.getField() + ": " + e.getDefaultMessage())
                 .orElse("Parámetros de entrada inválidos");
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.BAD_REQUEST.value());
-        response.setMensaje(sanitizarMensaje(primerError));
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+        return build(HttpStatus.BAD_REQUEST, msg);
     }
 
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<GenericResponse> handleGenericException(Exception ex) {
-        log.error("Error no controlado en la aplicación: {}", ex.getClass().getSimpleName());
-        GenericResponse response = new GenericResponse();
-        response.setCodigo(HttpStatus.INTERNAL_SERVER_ERROR.value());
-        response.setMensaje("Ocurrió un error interno al procesar la solicitud");
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);
+    public ResponseEntity<GenericResponse> handleGeneric(Exception ex) {
+        log.error("Error no controlado: {}", ex.getClass().getSimpleName());
+        return build(HttpStatus.INTERNAL_SERVER_ERROR, "Ocurrió un error interno al procesar la solicitud");
     }
 
-    /**
-     * Evita la exposición accidental de tokens Bearer, contraseñas, PINs o llaves criptográficas
-     * en los mensajes de respuesta HTTP o registros de log.
-     */
-    private String sanitizarMensaje(String mensaje) {
-        if (mensaje == null) {
-            return "Error en el procesamiento de la solicitud";
-        }
+    private ResponseEntity<GenericResponse> build(HttpStatus status, String mensaje) {
+        return ResponseEntity.status(status).body(new GenericResponse(status.value(), sanitizar(mensaje)));
+    }
+
+    private String sanitizar(String mensaje) {
+        if (mensaje == null) return "Error en el procesamiento de la solicitud";
         return mensaje
                 .replaceAll("(?i)Bearer\\s+[A-Za-z0-9\\-._~+/]+=*", "Bearer [REDACTED]")
                 .replaceAll("(?i)GP-JWT-[A-Za-z0-9\\-]+", "[REDACTED_TOKEN]")

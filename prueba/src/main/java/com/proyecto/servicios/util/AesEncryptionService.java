@@ -1,6 +1,6 @@
 package com.proyecto.servicios.util;
 
-import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -9,88 +9,70 @@ import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.security.SecureRandom;
 import java.util.Arrays;
 import java.util.Base64;
 
-/**
- * Servicio criptográfico para firma y cifrado AES de payloads
- * según el flujo de integración con el proveedor GestoPago.
- */
-@Slf4j
 @Component
 public class AesEncryptionService {
+
+    private static final byte[] EPHEMERAL_KEY = generarBytesAleatorios(32);
+    private static final byte[] EPHEMERAL_IV = generarBytesAleatorios(16);
 
     private final String secretKey;
     private final String algorithm;
     private final String ivString;
 
     public AesEncryptionService(
-            @Value("${gestopago.security.aes-key:GestoPagoAESSecretKey2026Secure32}") String secretKey,
+            @Value("${gestopago.security.aes-key:}") String secretKey,
             @Value("${gestopago.security.aes-algorithm:AES/CBC/PKCS5Padding}") String algorithm,
-            @Value("${gestopago.security.aes-iv:1234567890123456}") String ivString) {
+            @Value("${gestopago.security.aes-iv:}") String ivString) {
         this.secretKey = secretKey;
         this.algorithm = algorithm;
         this.ivString = ivString;
     }
 
-    /**
-     * Cifra un texto o payload JSON con AES y lo codifica en Base64.
-     */
     public String cifrar(String plainText) {
         if (plainText == null) return null;
-        try {
-            byte[] keyBytes = getValidKeyBytes(secretKey);
-            SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
-            Cipher cipher = Cipher.getInstance(algorithm);
-
-            if (algorithm.toUpperCase().contains("/CBC/")) {
-                byte[] ivBytes = Arrays.copyOf(ivString.getBytes(StandardCharsets.UTF_8), 16);
-                IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
-                cipher.init(Cipher.ENCRYPT_MODE, keySpec, ivSpec);
-            } else {
-                cipher.init(Cipher.ENCRYPT_MODE, keySpec);
-            }
-
-            byte[] encrypted = cipher.doFinal(plainText.getBytes(StandardCharsets.UTF_8));
-            return Base64.getEncoder().encodeToString(encrypted);
-        } catch (Exception e) {
-            log.error("Error al cifrar payload con AES: {}", e.getMessage(), e);
-            throw new RuntimeException("Error en proceso de cifrado AES: " + e.getMessage(), e);
-        }
+        return Base64.getEncoder().encodeToString(procesar(Cipher.ENCRYPT_MODE, plainText.getBytes(StandardCharsets.UTF_8)));
     }
 
-    /**
-     * Descifra un texto en Base64 cifrado con AES.
-     */
     public String descifrar(String base64CipherText) {
         if (base64CipherText == null) return null;
+        return new String(procesar(Cipher.DECRYPT_MODE, Base64.getDecoder().decode(base64CipherText)), StandardCharsets.UTF_8);
+    }
+
+    private byte[] procesar(int mode, byte[] input) {
         try {
-            byte[] keyBytes = getValidKeyBytes(secretKey);
+            byte[] keyBytes = resolverKeyBytes();
             SecretKeySpec keySpec = new SecretKeySpec(keyBytes, "AES");
             Cipher cipher = Cipher.getInstance(algorithm);
-
             if (algorithm.toUpperCase().contains("/CBC/")) {
-                byte[] ivBytes = Arrays.copyOf(ivString.getBytes(StandardCharsets.UTF_8), 16);
-                IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
-                cipher.init(Cipher.DECRYPT_MODE, keySpec, ivSpec);
+                byte[] iv = StringUtils.isNotBlank(ivString)
+                        ? Arrays.copyOf(ivString.getBytes(StandardCharsets.UTF_8), 16)
+                        : EPHEMERAL_IV;
+                cipher.init(mode, keySpec, new IvParameterSpec(iv));
             } else {
-                cipher.init(Cipher.DECRYPT_MODE, keySpec);
+                cipher.init(mode, keySpec);
             }
-
-            byte[] decrypted = cipher.doFinal(Base64.getDecoder().decode(base64CipherText));
-            return new String(decrypted, StandardCharsets.UTF_8);
+            return cipher.doFinal(input);
         } catch (Exception e) {
-            log.error("Error al descifrar payload con AES: {}", e.getMessage(), e);
-            throw new RuntimeException("Error en proceso de descifrado AES: " + e.getMessage(), e);
+            throw new IllegalStateException("Error en operación criptográfica AES", e);
         }
     }
 
-    private byte[] getValidKeyBytes(String key) throws Exception {
-        byte[] bytes = key.getBytes(StandardCharsets.UTF_8);
-        if (bytes.length == 16 || bytes.length == 24 || bytes.length == 32) {
-            return bytes;
+    private byte[] resolverKeyBytes() throws Exception {
+        if (StringUtils.isBlank(secretKey)) {
+            return EPHEMERAL_KEY;
         }
-        MessageDigest sha = MessageDigest.getInstance("SHA-256");
-        return sha.digest(bytes);
+        byte[] raw = secretKey.getBytes(StandardCharsets.UTF_8);
+        return (raw.length == 16 || raw.length == 24 || raw.length == 32)
+                ? raw : MessageDigest.getInstance("SHA-256").digest(raw);
+    }
+
+    private static byte[] generarBytesAleatorios(int length) {
+        byte[] bytes = new byte[length];
+        new SecureRandom().nextBytes(bytes);
+        return bytes;
     }
 }
