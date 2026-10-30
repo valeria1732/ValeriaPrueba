@@ -21,7 +21,6 @@ import javax.sql.DataSource;
 import java.util.HashMap;
 import java.util.Map;
 
-
 @Slf4j
 @Configuration
 @EnableTransactionManagement
@@ -45,8 +44,9 @@ public class ConfigDB {
         String password = env.getProperty("spring.datasource.password");
         String driverClass = env.getProperty("spring.datasource.driver-class-name");
 
-        // Soporte para DATABASE_URL o postgres:// en Render / plataformas en la nube
-        String rawUrl = (jdbcUrl != null && !jdbcUrl.isBlank()) ? jdbcUrl : env.getProperty("DATABASE_URL");
+        // Soporte prioritario para DATABASE_URL en Render / plataformas en la nube
+        String envDatabaseUrl = env.getProperty("DATABASE_URL");
+        String rawUrl = (envDatabaseUrl != null && !envDatabaseUrl.isBlank()) ? envDatabaseUrl : jdbcUrl;
         if (rawUrl != null && !rawUrl.isBlank()) {
             if (rawUrl.startsWith("postgres://") || rawUrl.startsWith("postgresql://")) {
                 try {
@@ -65,7 +65,7 @@ public class ConfigDB {
                         }
                     }
                 } catch (Exception ex) {
-                    log.warn("No se pudo parsear URI de base de datos ({}), usando fallback: {}", rawUrl, ex.getMessage());
+                    log.warn("No se pudo parsear URI de base de datos, usando fallback: {}", ex.getMessage());
                     jdbcUrl = rawUrl.startsWith("jdbc:") ? rawUrl : "jdbc:" + rawUrl;
                 }
             } else if (rawUrl.startsWith("jdbc:")) {
