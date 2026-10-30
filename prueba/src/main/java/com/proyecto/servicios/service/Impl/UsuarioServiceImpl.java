@@ -122,7 +122,7 @@ public class UsuarioServiceImpl implements UsuarioService {
     public com.proyecto.servicios.model.PageResponse<UsuarioResponse> consultarUsuariosConFiltroPaginados(String correo, Boolean activo, int page, int size) {
         log.info("Consultando usuarios paginados con filtro correo: {}, activo: {}, page: {}, size: {}", correo, activo, page, size);
         int safePage = Math.max(page, 0);
-        int safeSize = size > 0 ? size : 10;
+        int safeSize = size > 0 ? Math.min(size, 100) : 10;
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(safePage, safeSize);
 
         Specification<UsuarioEntity> spec = createUsuarioSpec(correo, activo);

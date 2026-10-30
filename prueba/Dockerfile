@@ -7,7 +7,9 @@ RUN gradle bootJar --no-daemon -x test
 
 FROM eclipse-temurin:17-jre-alpine
 WORKDIR /app
-COPY --from=build /app/build/libs/*.jar app.jar
+RUN addgroup -S app && adduser -S app -G app
+COPY --from=build --chown=app:app /app/build/libs/*.jar app.jar
+USER app
 ENV PORT=8088
 ENV SERVER_PORT=8088
 EXPOSE 8088

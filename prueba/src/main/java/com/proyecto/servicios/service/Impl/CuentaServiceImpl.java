@@ -93,7 +93,7 @@ public class CuentaServiceImpl implements CuentaService {
         log.info("Consultando cuentas paginadas - clienteId: {}, estatus: {}, page: {}, size: {}",
                 clienteId, estatus, page, size);
         int safePage = Math.max(page, 0);
-        int safeSize = size > 0 ? size : 10;
+        int safeSize = size > 0 ? Math.min(size, 100) : 10;
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(safePage, safeSize);
 
         org.springframework.data.domain.Page<CuentaEntity> pageResult;
