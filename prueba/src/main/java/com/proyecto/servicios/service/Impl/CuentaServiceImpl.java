@@ -45,7 +45,7 @@ public class CuentaServiceImpl implements CuentaService {
         ClienteEntity cliente = clienteRepository.findById(request.getClienteId())
                 .orElseThrow(() -> new ClienteNotFoundException("No se encontró ningún cliente con el ID: " + request.getClienteId()));
 
-        if (Boolean.FALSE.equals(cliente.getActivo())) {
+        if (!Boolean.TRUE.equals(cliente.getActivo())) {
             throw new ClienteBusinessException("Solo los clientes activos pueden aperturar cuentas bancarias");
         }
 
@@ -145,7 +145,7 @@ public class CuentaServiceImpl implements CuentaService {
 
         if (StringUtils.isNotBlank(request.getEstatus())) {
             String nuevoEstatus = request.getEstatus().trim().toUpperCase();
-            if ("ACTIVA".equalsIgnoreCase(nuevoEstatus) && Boolean.FALSE.equals(cuenta.getCliente().getActivo())) {
+            if ("ACTIVA".equalsIgnoreCase(nuevoEstatus) && !Boolean.TRUE.equals(cuenta.getCliente().getActivo())) {
                 throw new ClienteBusinessException("Solo los clientes activos podrán tener cuentas activas");
             }
             cuenta.setEstatus(nuevoEstatus);

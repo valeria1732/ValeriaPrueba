@@ -58,7 +58,7 @@ public class UsuarioServiceImpl implements UsuarioService {
         UsuarioEntity usuario = usuarioRepository.findByCorreo(correoLimpio)
                 .orElseThrow(() -> new UsuarioNotFoundException("No se encontró el usuario con correo: " + request.getCorreo()));
 
-        if (Boolean.FALSE.equals(usuario.getActivo())) {
+        if (!Boolean.TRUE.equals(usuario.getActivo())) {
             log.warn("Intento de inicio de sesión para usuario inactivo: {}", correoLimpio);
             throw new UsuarioInactivoException("El usuario se encuentra inactivo. Acceso denegado");
         }
