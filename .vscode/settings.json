@@ -1,0 +1,11 @@
+{
+  "sonarlint.rules": {},
+  "sonarlint.analysisExcludes": "**/build/**,**/.gradle/**",
+  "java.configuration.updateBuildConfiguration": "automatic",
+  "files.exclude": {
+    "**/.git": true,
+    "**/.gradle": true,
+    "**/build": false
+  }
+}
+

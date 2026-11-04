@@ -309,6 +309,34 @@ class PagoServicioServiceImplTest {
     }
 
     @Test
+    @DisplayName("Idempotencia: si la misma solicitud con idempKey se reenvía idéntica, retorna la respuesta previa sin duplicar cargo")
+    void testProcesarPago_IdempotenciaExitosaReenvioRespuestaPrevia() {
+        when(gestoPagoProductoRepository.findByIdProducto(202)).thenReturn(Optional.of(productoCatalogo));
+
+        PagoServicioEntity existente = PagoServicioEntity.builder()
+                .id(400)
+                .idempotencyKey("IDEMP-0001")
+                .numeroCuenta("0019547596")
+                .idProducto(202)
+                .precio(new BigDecimal("350.00"))
+                .folioAutorizacion("GP-PREVIO-OK")
+                .estatusTransaccion("EXITOSA")
+                .saldoAnterior(new BigDecimal("1500.00"))
+                .saldoPosterior(new BigDecimal("1150.00"))
+                .build();
+        when(pagoServicioRepository.findByIdempotencyKey("IDEMP-0001")).thenReturn(Optional.of(existente));
+
+        PagoServicioResponse response = pagoServicioService.procesarPagoServicio(validRequest);
+
+        assertNotNull(response);
+        assertTrue(response.getExitoso());
+        assertEquals("EXITOSA", response.getEstatusTransaccion());
+        assertEquals("GP-PREVIO-OK", response.getFolioTransaccion());
+        verify(cuentaRepository, never()).findByNumeroCuentaWithLock(anyString());
+        verify(transactionClient, never()).sendTx(anyString(), any());
+    }
+
+    @Test
     @DisplayName("Ante rechazo explícito de GestoPago (código != 0), debe revertir automáticamente el saldo a la cuenta")
     void testProcesarPago_RechazoProveedor_EjecutaReversoDeSaldo() {
         when(gestoPagoProductoRepository.findByIdProducto(202)).thenReturn(Optional.of(productoCatalogo));
@@ -329,6 +357,7 @@ class PagoServicioServiceImplTest {
                 .build();
 
         when(pagoServicioRepository.save(any(PagoServicioEntity.class))).thenReturn(registroEnProceso);
+        when(pagoServicioRepository.findByIdWithLock(501)).thenReturn(Optional.of(registroEnProceso));
         when(pagoServicioRepository.findById(501)).thenReturn(Optional.of(registroEnProceso));
 
         GestoPagoTxResponse rechazoResponse = GestoPagoTxResponse.builder()
@@ -403,6 +432,7 @@ class PagoServicioServiceImplTest {
                 .build();
 
         when(pagoServicioRepository.findById(502)).thenReturn(Optional.of(txPendiente));
+        when(pagoServicioRepository.findByIdWithLock(502)).thenReturn(Optional.of(txPendiente));
         when(cuentaRepository.findByNumeroCuentaWithLock("0019547596")).thenReturn(Optional.of(cuentaActiva));
         when(pagoServicioRepository.save(any(PagoServicioEntity.class))).thenAnswer(inv -> inv.getArgument(0));
 

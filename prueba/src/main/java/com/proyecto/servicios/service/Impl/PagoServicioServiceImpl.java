@@ -45,6 +45,7 @@ import java.util.function.Supplier;
 public class PagoServicioServiceImpl implements PagoServicioService {
 
     private static final List<String> ESTATUS_ACTIVOS = List.of("EN_PROCESO", "PENDIENTE_CONCILIACION", "EXITOSA");
+    private static final String DEFAULT_DEVICE_FALLBACK = "DEV_TEST_001";
 
     private final CuentaRepository cuentaRepository;
     private final GestoPagoTokenService gestoPagoTokenService;
@@ -72,8 +73,8 @@ public class PagoServicioServiceImpl implements PagoServicioService {
             PasswordEncoder passwordEncoder,
             ObjectMapper objectMapper,
             PagoServicioRepository pagoServicioRepository,
-            @Autowired(required = false) GestoPagoProductoRepository gestoPagoProductoRepository,
-            @Autowired(required = false) SecurityConfig securityConfig,
+            GestoPagoProductoRepository gestoPagoProductoRepository,
+            SecurityConfig securityConfig,
             @Autowired(required = false) PlatformTransactionManager transactionManager) {
         this.cuentaRepository = cuentaRepository;
         this.gestoPagoTokenService = gestoPagoTokenService;
@@ -97,7 +98,22 @@ public class PagoServicioServiceImpl implements PagoServicioService {
         validarEntradaYCatalogo(req);
 
         String idempKey = StringUtils.defaultIfBlank(headerIdempKey, req.getIdempotencyKey());
-        String dispositivo = StringUtils.defaultIfBlank(defaultCodigoDispositivo, "DEV_TEST_001");
+        if (StringUtils.isNotBlank(idempKey)) {
+            Optional<PagoServicioEntity> txExistente = pagoServicioRepository.findByIdempotencyKey(idempKey.trim());
+            if (txExistente.isPresent()) {
+                PagoServicioEntity previa = txExistente.get();
+                boolean coincideParametros = java.util.Objects.equals(previa.getNumeroCuenta(), req.getNumCuenta())
+                        && java.util.Objects.equals(previa.getIdProducto(), req.getIdProducto())
+                        && previa.getPrecio() != null && req.getPrecio() != null
+                        && previa.getPrecio().compareTo(req.getPrecio()) == 0;
+                if (coincideParametros) {
+                    return mapearRespuesta(previa, "EXITOSA".equalsIgnoreCase(previa.getEstatusTransaccion()));
+                }
+                throw new TransaccionDuplicadaException("Clave de idempotencia ya utilizada con parámetros diferentes");
+            }
+        }
+
+        String dispositivo = StringUtils.defaultIfBlank(defaultCodigoDispositivo, DEFAULT_DEVICE_FALLBACK);
         String rawToken = resolverBearerToken(req.getDistribuidor(), dispositivo);
         String firmaAes = cifrarPayload(req);
 
@@ -129,8 +145,20 @@ public class PagoServicioServiceImpl implements PagoServicioService {
             return mapearRespuesta(confirmada, true);
         }
 
-        int cod = (res != null && res.getCodigo() != null) ? res.getCodigo() : 99;
-        String msg = (res != null && StringUtils.isNotBlank(res.getMensaje())) ? res.getMensaje() : "Rechazado por proveedor";
+        // Si la respuesta es nula o sin código, no se asume rechazo: pasa a PENDIENTE_CONCILIACION
+        if (res == null || res.getCodigo() == null) {
+            enTransaccion(() -> actualizarEstado(
+                    tx.getId(), "PENDIENTE_CONCILIACION", 500,
+                    "Respuesta indeterminada del proveedor. Saldo retenido para conciliación",
+                    tx.getFolioAutorizacion()));
+            throw new TransaccionPendienteConciliacionException(
+                    "Respuesta indeterminada del proveedor. Operación " + tx.getFolioAutorizacion()
+                            + " en estado PENDIENTE_CONCILIACION.",
+                    tx.getFolioAutorizacion(), null);
+        }
+
+        int cod = res.getCodigo();
+        String msg = StringUtils.defaultIfBlank(res.getMensaje(), "Rechazado por proveedor");
         revertirSaldo(tx.getId(), cod, msg);
         throw new ClienteBusinessException("Transacción rechazada por el proveedor (Código " + cod + "): " + msg);
     }
@@ -141,7 +169,9 @@ public class PagoServicioServiceImpl implements PagoServicioService {
         if (idTransaccion == null || req == null || req.getConfirmadaPorProveedor() == null) {
             throw new IllegalArgumentException("Datos de conciliación incompletos");
         }
-        PagoServicioEntity tx = obtenerTransaccion(idTransaccion);
+        PagoServicioEntity tx = pagoServicioRepository.findByIdWithLock(idTransaccion)
+                .orElseThrow(() -> new ClienteBusinessException("Transacción no encontrada: " + idTransaccion));
+
         if (!"PENDIENTE_CONCILIACION".equalsIgnoreCase(tx.getEstatusTransaccion())
                 && !"EN_PROCESO".equalsIgnoreCase(tx.getEstatusTransaccion())) {
             throw new ClienteBusinessException("La transacción no requiere conciliación (estado: " + tx.getEstatusTransaccion() + ")");
@@ -179,11 +209,10 @@ public class PagoServicioServiceImpl implements PagoServicioService {
         if (StringUtils.isBlank(req.getPin())) {
             throw new ContrasenaInvalidaException("El PIN o Pass Seguro es obligatorio");
         }
-        if (gestoPagoProductoRepository == null) return;
 
         GestoPagoProductoEntity prod = gestoPagoProductoRepository.findByIdProducto(req.getIdProducto())
                 .orElseThrow(() -> new ProductoNoEncontradoException("El producto " + req.getIdProducto() + " no existe en el catálogo"));
-        if (Boolean.FALSE.equals(prod.getActivo())) {
+        if (!Boolean.TRUE.equals(prod.getActivo())) {
             throw new MontoInvalidoException("El producto solicitado no se encuentra activo");
         }
         if (prod.getIdServicio() != null && !prod.getIdServicio().equals(req.getIdServicio())) {
@@ -236,17 +265,17 @@ public class PagoServicioServiceImpl implements PagoServicioService {
 
     private void validarTitularYCredenciales(CuentaEntity cuenta, Integer reqClienteId, String pin, String authHeader) {
         ClienteEntity cliente = cuenta.getCliente();
-        if (cliente == null || Boolean.FALSE.equals(cliente.getActivo())) {
+        if (cliente == null || !Boolean.TRUE.equals(cliente.getActivo())) {
             throw new OperacionNoAutorizadaException("El cliente titular no está activo o autorizado");
         }
         UsuarioEntity usuario = cliente.getUsuario();
-        if (usuario == null || Boolean.FALSE.equals(usuario.getActivo())) {
+        if (usuario == null || !Boolean.TRUE.equals(usuario.getActivo())) {
             throw new UsuarioInactivoException("El usuario asociado a la cuenta no está activo");
         }
         if (reqClienteId != null && !reqClienteId.equals(cliente.getId())) {
             throw new OperacionNoAutorizadaException("El cliente no tiene autorización sobre esta cuenta");
         }
-        if (StringUtils.isNotBlank(authHeader) && securityConfig != null) {
+        if (StringUtils.isNotBlank(authHeader)) {
             try {
                 DecodedJWT jwt = securityConfig.validarYDecodificarToken(limpiarBearer(authHeader));
                 Integer jwtClienteId = jwt.getClaim("clienteId").asInt();
@@ -305,7 +334,7 @@ public class PagoServicioServiceImpl implements PagoServicioService {
     private void revertirSaldo(Integer idTx, Integer cod, String motivo) {
         if (idTx == null) return;
         enTransaccion(() -> {
-            pagoServicioRepository.findById(idTx).ifPresent(tx -> {
+            pagoServicioRepository.findByIdWithLock(idTx).ifPresent(tx -> {
                 if ("EN_PROCESO".equalsIgnoreCase(tx.getEstatusTransaccion())
                         || "PENDIENTE_CONCILIACION".equalsIgnoreCase(tx.getEstatusTransaccion())) {
                     CuentaEntity cuenta = obtenerCuentaBloqueada(tx.getNumeroCuenta());
@@ -333,7 +362,6 @@ public class PagoServicioServiceImpl implements PagoServicioService {
 
     private CuentaEntity obtenerCuentaBloqueada(String numCuenta) {
         return cuentaRepository.findByNumeroCuentaWithLock(numCuenta)
-                .or(() -> cuentaRepository.findByNumeroCuenta(numCuenta))
                 .orElseThrow(() -> new CuentaNotFoundException("Cuenta bancaria no encontrada"));
     }
 
