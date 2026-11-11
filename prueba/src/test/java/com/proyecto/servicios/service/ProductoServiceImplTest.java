@@ -1,6 +1,7 @@
 package com.proyecto.servicios.service;
 
 import com.proyecto.servicios.client.GestoPagoProductClient;
+import com.proyecto.servicios.entity.gestopago.GestoPagoProductoEntity;
 import com.proyecto.servicios.entity.gestopago.GestoPagoToken;
 import com.proyecto.servicios.exception.GestoPagoAuthException;
 import com.proyecto.servicios.exception.GestoPagoIntegrationException;
@@ -8,7 +9,7 @@ import com.proyecto.servicios.exception.GestoPagoTimeoutException;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductListResponse;
 import com.proyecto.servicios.model.gestopago.GestoPagoProductResponse;
 import com.proyecto.servicios.repositorys.gestopago.GestoPagoProductoRepository;
-import com.proyecto.servicios.service.Impl.ProductoServiceImpl;
+import com.proyecto.servicios.service.impl.ProductoServiceImpl;
 import feign.FeignException;
 import feign.Request;
 import feign.RequestTemplate;
@@ -231,5 +232,44 @@ class ProductoServiceImplTest {
     @DisplayName("Debe ejecutar la limpieza de caché de productos sin arrojar excepciones")
     void testLimpiarCacheProductos() {
         assertDoesNotThrow(() -> productoService.limpiarCacheProductos());
+    }
+
+    @Test
+    @DisplayName("Debe sincronizar catálogo con PostgreSQL en cron, tolerar errores inesperados y manejar fallos de token BD")
+    void testCronYSincronizacionYErroresInesperados() {
+        ReflectionTestUtils.setField(productoService, "configuredToken", "fallback_tok");
+        ReflectionTestUtils.setField(productoService, "idDistribuidor", 1001);
+        ReflectionTestUtils.setField(productoService, "codigoDispositivo", "DEV_001");
+
+        when(gestoPagoTokenService.obtenerTokenActivo(1001, "DEV_001"))
+                .thenThrow(new RuntimeException("BD temporalmente caída"));
+
+        GestoPagoProductResponse conNullCodigo = GestoPagoProductResponse.builder().idProducto(1).codigo(null).build();
+        GestoPagoProductResponse inactivo = GestoPagoProductResponse.builder()
+                .idProducto(102)
+                .codigo("PROD-002")
+                .descripcion("Otro")
+                .activo(false)
+                .build();
+        GestoPagoProductListResponse listConAmbos = GestoPagoProductListResponse.builder()
+                .codigo(0)
+                .productos(List.of(conNullCodigo, inactivo, mockSuccessResponse.getProductos().get(0)))
+                .build();
+
+        when(gestoPagoProductClient.getProductList("Bearer fallback_tok")).thenReturn(listConAmbos);
+        when(gestoPagoProductoRepository.findByCodigo("PROD-002")).thenReturn(Optional.empty());
+        when(gestoPagoProductoRepository.findByCodigo("PROD-001")).thenReturn(Optional.of(
+                GestoPagoProductoEntity.builder().codigo("PROD-001").build()));
+
+        assertDoesNotThrow(() -> productoService.sincronizarCatalogoProductosCron());
+        verify(gestoPagoProductoRepository, times(2)).save(any(GestoPagoProductoEntity.class));
+
+        when(gestoPagoProductClient.getProductList("Bearer fallback_tok"))
+                .thenThrow(new RuntimeException("Error inesperado"));
+        assertThrows(GestoPagoIntegrationException.class, () -> productoService.obtenerListaProductos());
+        assertDoesNotThrow(() -> productoService.sincronizarCatalogoProductosCron());
+
+        assertThrows(GestoPagoAuthException.class,
+                () -> ReflectionTestUtils.invokeMethod(productoService, "formatearBearerHeader", (Object) null));
     }
 }

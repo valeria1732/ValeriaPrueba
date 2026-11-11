@@ -1,4 +1,4 @@
-package com.proyecto.servicios.service.Impl;
+package com.proyecto.servicios.service.impl;
 
 import com.proyecto.servicios.entity.sf.ClienteEntity;
 import com.proyecto.servicios.entity.sf.CuentaEntity;
@@ -21,11 +21,12 @@ import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
 public class CuentaServiceImpl implements CuentaService {
+
+    private static final String CUENTA_NO_ENCONTRADA = "No se encontró la cuenta bancaria con número: ";
 
     private final CuentaRepository cuentaRepository;
     private final ClienteRepository clienteRepository;
@@ -82,7 +83,7 @@ public class CuentaServiceImpl implements CuentaService {
     public CuentaResponse consultarPorNumeroCuenta(String numeroCuenta) {
         log.info("Consultando cuenta bancaria por número: {}", numeroCuenta);
         CuentaEntity cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta.trim())
-                .orElseThrow(() -> new CuentaNotFoundException("No se encontró la cuenta bancaria con número: " + numeroCuenta));
+                .orElseThrow(() -> new CuentaNotFoundException(CUENTA_NO_ENCONTRADA + numeroCuenta));
         return mapToResponse(cuenta);
     }
 
@@ -110,7 +111,7 @@ public class CuentaServiceImpl implements CuentaService {
 
         List<CuentaResponse> content = pageResult.getContent().stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
 
         return com.proyecto.servicios.model.PageResponse.of(content, pageResult.getNumber(), pageResult.getSize(), pageResult.getTotalElements());
     }
@@ -124,7 +125,7 @@ public class CuentaServiceImpl implements CuentaService {
         }
         return cuentaRepository.findByClienteId(clienteId).stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -133,7 +134,7 @@ public class CuentaServiceImpl implements CuentaService {
         log.info("Consultando cuentas bancarias por estatus: {}", estatus);
         return cuentaRepository.findByEstatus(estatus.trim().toUpperCase()).stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
@@ -141,7 +142,7 @@ public class CuentaServiceImpl implements CuentaService {
     public CuentaResponse actualizarParcial(String numeroCuenta, CuentaActualizaRequest request) {
         log.info("Actualizando parcialmente cuenta bancaria: {}", numeroCuenta);
         CuentaEntity cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta.trim())
-                .orElseThrow(() -> new CuentaNotFoundException("No se encontró la cuenta bancaria con número: " + numeroCuenta));
+                .orElseThrow(() -> new CuentaNotFoundException(CUENTA_NO_ENCONTRADA + numeroCuenta));
 
         if (StringUtils.isNotBlank(request.getEstatus())) {
             String nuevoEstatus = request.getEstatus().trim().toUpperCase();
@@ -168,7 +169,7 @@ public class CuentaServiceImpl implements CuentaService {
     public BigDecimal consultarSaldo(String numeroCuenta) {
         log.info("Consultando saldo para cuenta bancaria: {}", numeroCuenta);
         CuentaEntity cuenta = cuentaRepository.findByNumeroCuenta(numeroCuenta.trim())
-                .orElseThrow(() -> new CuentaNotFoundException("No se encontró la cuenta bancaria con número: " + numeroCuenta));
+                .orElseThrow(() -> new CuentaNotFoundException(CUENTA_NO_ENCONTRADA + numeroCuenta));
         return cuenta.getSaldo();
     }
 

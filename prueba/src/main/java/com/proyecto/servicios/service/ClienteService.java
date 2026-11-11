@@ -2,11 +2,11 @@ package com.proyecto.servicios.service;
 
 import com.proyecto.servicios.model.PageResponse;
 import com.proyecto.servicios.model.cliente.ClienteActualizaRequest;
+import com.proyecto.servicios.model.cliente.ClienteFiltroRequest;
 import com.proyecto.servicios.model.cliente.ClientePatchRequest;
 import com.proyecto.servicios.model.cliente.ClienteRegistroRequest;
 import com.proyecto.servicios.model.cliente.ClienteResponse;
 
-import java.time.LocalDate;
 import java.util.List;
 
 public interface ClienteService {
@@ -23,31 +23,9 @@ public interface ClienteService {
 
     ClienteResponse consultarPorNumeroCuenta(String numeroCuenta);
 
-    PageResponse<ClienteResponse> consultarClientesPaginados(
-            String nombre,
-            String apellidoPaterno,
-            String apellidoMaterno,
-            String curp,
-            String rfc,
-            String correo,
-            Boolean activo,
-            LocalDate fechaInicio,
-            LocalDate fechaFin,
-            int page,
-            int size
-    );
+    PageResponse<ClienteResponse> consultarClientesPaginados(ClienteFiltroRequest filtro, int page, int size);
 
-    List<ClienteResponse> consultarClientes(
-            String nombre,
-            String apellidoPaterno,
-            String apellidoMaterno,
-            String curp,
-            String rfc,
-            String correo,
-            Boolean activo,
-            LocalDate fechaInicio,
-            LocalDate fechaFin
-    );
+    List<ClienteResponse> consultarClientes(ClienteFiltroRequest filtro);
 
     ClienteResponse actualizarCliente(Integer id, ClienteActualizaRequest request);
 

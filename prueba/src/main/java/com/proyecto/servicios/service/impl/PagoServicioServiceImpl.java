@@ -1,4 +1,4 @@
-package com.proyecto.servicios.service.Impl;
+package com.proyecto.servicios.service.impl;
 
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -44,7 +45,11 @@ import java.util.function.Supplier;
 @Slf4j
 public class PagoServicioServiceImpl implements PagoServicioService {
 
-    private static final List<String> ESTATUS_ACTIVOS = List.of("EN_PROCESO", "PENDIENTE_CONCILIACION", "EXITOSA");
+    private static final String ESTATUS_EN_PROCESO = "EN_PROCESO";
+    private static final String ESTATUS_PENDIENTE = "PENDIENTE_CONCILIACION";
+    private static final String ESTATUS_EXITOSA = "EXITOSA";
+    private static final String ESTATUS_REVERSADA = "REVERSADA";
+    private static final List<String> ESTATUS_ACTIVOS = List.of(ESTATUS_EN_PROCESO, ESTATUS_PENDIENTE, ESTATUS_EXITOSA);
     private static final String DEFAULT_DEVICE_FALLBACK = "DEV_TEST_001";
 
     private final CuentaRepository cuentaRepository;
@@ -98,19 +103,9 @@ public class PagoServicioServiceImpl implements PagoServicioService {
         validarEntradaYCatalogo(req);
 
         String idempKey = StringUtils.defaultIfBlank(headerIdempKey, req.getIdempotencyKey());
-        if (StringUtils.isNotBlank(idempKey)) {
-            Optional<PagoServicioEntity> txExistente = pagoServicioRepository.findByIdempotencyKey(idempKey.trim());
-            if (txExistente.isPresent()) {
-                PagoServicioEntity previa = txExistente.get();
-                boolean coincideParametros = java.util.Objects.equals(previa.getNumeroCuenta(), req.getNumCuenta())
-                        && java.util.Objects.equals(previa.getIdProducto(), req.getIdProducto())
-                        && previa.getPrecio() != null && req.getPrecio() != null
-                        && previa.getPrecio().compareTo(req.getPrecio()) == 0;
-                if (coincideParametros) {
-                    return mapearRespuesta(previa, "EXITOSA".equalsIgnoreCase(previa.getEstatusTransaccion()));
-                }
-                throw new TransaccionDuplicadaException("Clave de idempotencia ya utilizada con parámetros diferentes");
-            }
+        PagoServicioResponse respuestaPrevia = buscarRespuestaIdempotente(req, idempKey);
+        if (respuestaPrevia != null) {
+            return respuestaPrevia;
         }
 
         String dispositivo = StringUtils.defaultIfBlank(defaultCodigoDispositivo, DEFAULT_DEVICE_FALLBACK);
@@ -139,7 +134,7 @@ public class PagoServicioServiceImpl implements PagoServicioService {
         // Fase 3: Confirmación o compensación por rechazo explícito del proveedor
         if (res != null && Integer.valueOf(0).equals(res.getCodigo())) {
             PagoServicioEntity confirmada = enTransaccion(() -> actualizarEstado(
-                    tx.getId(), "EXITOSA", 0,
+                    tx.getId(), ESTATUS_EXITOSA, 0,
                     StringUtils.defaultIfBlank(res.getMensaje(), "Pago procesado exitosamente"),
                     StringUtils.firstNonBlank(res.getFolio(), res.getAutorizacion(), tx.getFolioAutorizacion())));
             return mapearRespuesta(confirmada, true);
@@ -147,8 +142,8 @@ public class PagoServicioServiceImpl implements PagoServicioService {
 
         // Si la respuesta es nula o sin código, no se asume rechazo: pasa a PENDIENTE_CONCILIACION
         if (res == null || res.getCodigo() == null) {
-            enTransaccion(() -> actualizarEstado(
-                    tx.getId(), "PENDIENTE_CONCILIACION", 500,
+            ejecutarEnTransaccion(() -> actualizarEstado(
+                    tx.getId(), ESTATUS_PENDIENTE, 500,
                     "Respuesta indeterminada del proveedor. Saldo retenido para conciliación",
                     tx.getFolioAutorizacion()));
             throw new TransaccionPendienteConciliacionException(
@@ -163,6 +158,25 @@ public class PagoServicioServiceImpl implements PagoServicioService {
         throw new ClienteBusinessException("Transacción rechazada por el proveedor (Código " + cod + "): " + msg);
     }
 
+    private PagoServicioResponse buscarRespuestaIdempotente(PagoServicioRequest req, String idempKey) {
+        if (StringUtils.isBlank(idempKey)) {
+            return null;
+        }
+        Optional<PagoServicioEntity> txExistente = pagoServicioRepository.findByIdempotencyKey(idempKey.trim());
+        if (txExistente.isEmpty()) {
+            return null;
+        }
+        PagoServicioEntity previa = txExistente.get();
+        boolean coincideParametros = Objects.equals(previa.getNumeroCuenta(), req.getNumCuenta())
+                && Objects.equals(previa.getIdProducto(), req.getIdProducto())
+                && previa.getPrecio() != null && req.getPrecio() != null
+                && previa.getPrecio().compareTo(req.getPrecio()) == 0;
+        if (coincideParametros) {
+            return mapearRespuesta(previa, ESTATUS_EXITOSA.equalsIgnoreCase(previa.getEstatusTransaccion()));
+        }
+        throw new TransaccionDuplicadaException("Clave de idempotencia ya utilizada con parámetros diferentes");
+    }
+
     @Override
     @Transactional
     public PagoServicioResponse conciliarTransaccion(Integer idTransaccion, ConciliacionRequest req) {
@@ -172,13 +186,13 @@ public class PagoServicioServiceImpl implements PagoServicioService {
         PagoServicioEntity tx = pagoServicioRepository.findByIdWithLock(idTransaccion)
                 .orElseThrow(() -> new ClienteBusinessException("Transacción no encontrada: " + idTransaccion));
 
-        if (!"PENDIENTE_CONCILIACION".equalsIgnoreCase(tx.getEstatusTransaccion())
-                && !"EN_PROCESO".equalsIgnoreCase(tx.getEstatusTransaccion())) {
+        if (!ESTATUS_PENDIENTE.equalsIgnoreCase(tx.getEstatusTransaccion())
+                && !ESTATUS_EN_PROCESO.equalsIgnoreCase(tx.getEstatusTransaccion())) {
             throw new ClienteBusinessException("La transacción no requiere conciliación (estado: " + tx.getEstatusTransaccion() + ")");
         }
 
         if (Boolean.TRUE.equals(req.getConfirmadaPorProveedor())) {
-            PagoServicioEntity ok = actualizarEstado(idTransaccion, "EXITOSA", 0,
+            PagoServicioEntity ok = actualizarEstado(idTransaccion, ESTATUS_EXITOSA, 0,
                     StringUtils.defaultIfBlank(req.getMotivo(), "Confirmada por conciliación"),
                     StringUtils.defaultIfBlank(req.getFolioProveedor(), tx.getFolioAutorizacion()));
             return mapearRespuesta(ok, true);
@@ -192,7 +206,7 @@ public class PagoServicioServiceImpl implements PagoServicioService {
     @Transactional(readOnly = true)
     public PagoServicioResponse consultarEstadoTransaccion(Integer idTransaccion) {
         PagoServicioEntity tx = obtenerTransaccion(idTransaccion);
-        return mapearRespuesta(tx, "EXITOSA".equalsIgnoreCase(tx.getEstatusTransaccion()));
+        return mapearRespuesta(tx, ESTATUS_EXITOSA.equalsIgnoreCase(tx.getEstatusTransaccion()));
     }
 
     private void validarEntradaYCatalogo(PagoServicioRequest req) {
@@ -253,7 +267,7 @@ public class PagoServicioServiceImpl implements PagoServicioService {
                 .telefonoReferencia(req.getTelefonoReferencia().trim())
                 .distribuidor(req.getDistribuidor())
                 .bandera(StringUtils.defaultIfBlank(req.getBandera(), "0"))
-                .estatusTransaccion("EN_PROCESO")
+                .estatusTransaccion(ESTATUS_EN_PROCESO)
                 .codigoRespuesta(102)
                 .mensajeRespuesta("Fondos reservados en proceso")
                 .folioAutorizacion("TX-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase())
@@ -275,21 +289,26 @@ public class PagoServicioServiceImpl implements PagoServicioService {
         if (reqClienteId != null && !reqClienteId.equals(cliente.getId())) {
             throw new OperacionNoAutorizadaException("El cliente no tiene autorización sobre esta cuenta");
         }
-        if (StringUtils.isNotBlank(authHeader)) {
-            try {
-                DecodedJWT jwt = securityConfig.validarYDecodificarToken(limpiarBearer(authHeader));
-                Integer jwtClienteId = jwt.getClaim("clienteId").asInt();
-                if (jwtClienteId != null && !jwtClienteId.equals(cliente.getId())) {
-                    throw new OperacionNoAutorizadaException("El cliente autenticado no es titular de la cuenta");
-                }
-            } catch (OperacionNoAutorizadaException e) {
-                throw e;
-            } catch (Exception e) {
-                throw new CredencialesInvalidasException("Token de sesión inválido o expirado");
-            }
-        }
+        validarJwtTitular(authHeader, cliente.getId());
         if (StringUtils.isBlank(usuario.getPassword()) || !passwordEncoder.matches(pin, usuario.getPassword())) {
             throw new ContrasenaInvalidaException("Pass Seguro / PIN inválido");
+        }
+    }
+
+    private void validarJwtTitular(String authHeader, Integer clienteId) {
+        if (StringUtils.isBlank(authHeader)) {
+            return;
+        }
+        try {
+            DecodedJWT jwt = securityConfig.validarYDecodificarToken(limpiarBearer(authHeader));
+            Integer jwtClienteId = jwt.getClaim("clienteId").asInt();
+            if (jwtClienteId != null && !jwtClienteId.equals(clienteId)) {
+                throw new OperacionNoAutorizadaException("El cliente autenticado no es titular de la cuenta");
+            }
+        } catch (OperacionNoAutorizadaException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new CredencialesInvalidasException("Token de sesión inválido o expirado");
         }
     }
 
@@ -312,13 +331,12 @@ public class PagoServicioServiceImpl implements PagoServicioService {
             revertirSaldo(tx.getId(), 401, "Error de autenticación con proveedor");
             return new GestoPagoAuthException("Error de autenticación con el proveedor externo", ex);
         }
-        Integer status = (ex instanceof GestoPagoIntegrationException g) ? g.getCodigo()
-                : (ex instanceof FeignException f ? f.status() : null);
+        Integer status = extraerCodigoHttp(ex);
         boolean timeoutOIndeterminado = (ex instanceof GestoPagoTimeoutException) || (ex instanceof RetryableException)
                 || status == null || status == 408 || status == 502 || status == 503 || status == 504 || status < 0;
 
         if (timeoutOIndeterminado) {
-            enTransaccion(() -> actualizarEstado(tx.getId(), "PENDIENTE_CONCILIACION", 504,
+            ejecutarEnTransaccion(() -> actualizarEstado(tx.getId(), ESTATUS_PENDIENTE, 504,
                     "Timeout en proveedor. Saldo retenido pendiente de conciliación", tx.getFolioAutorizacion()));
             return new TransaccionPendienteConciliacionException(
                     "Timeout con el proveedor. Operación " + tx.getFolioAutorizacion()
@@ -331,24 +349,33 @@ public class PagoServicioServiceImpl implements PagoServicioService {
                 : new GestoPagoIntegrationException("Error en el proveedor externo", status, ex);
     }
 
+    private Integer extraerCodigoHttp(Exception ex) {
+        if (ex instanceof GestoPagoIntegrationException g) {
+            return g.getCodigo();
+        }
+        if (ex instanceof FeignException f) {
+            return f.status();
+        }
+        return null;
+    }
+
     private void revertirSaldo(Integer idTx, Integer cod, String motivo) {
-        if (idTx == null) return;
-        enTransaccion(() -> {
-            pagoServicioRepository.findByIdWithLock(idTx).ifPresent(tx -> {
-                if ("EN_PROCESO".equalsIgnoreCase(tx.getEstatusTransaccion())
-                        || "PENDIENTE_CONCILIACION".equalsIgnoreCase(tx.getEstatusTransaccion())) {
-                    CuentaEntity cuenta = obtenerCuentaBloqueada(tx.getNumeroCuenta());
-                    cuenta.setSaldo(cuenta.getSaldo().add(tx.getPrecio()));
-                    cuentaRepository.save(cuenta);
-                    tx.setEstatusTransaccion("REVERSADA");
-                    tx.setCodigoRespuesta(cod != null ? cod : 99);
-                    tx.setMensajeRespuesta(StringUtils.abbreviate(motivo, 250));
-                    tx.setSaldoPosterior(cuenta.getSaldo());
-                    pagoServicioRepository.save(tx);
-                }
-            });
-            return null;
-        });
+        if (idTx == null) {
+            return;
+        }
+        ejecutarEnTransaccion(() -> pagoServicioRepository.findByIdWithLock(idTx).ifPresent(tx -> {
+            if (ESTATUS_EN_PROCESO.equalsIgnoreCase(tx.getEstatusTransaccion())
+                    || ESTATUS_PENDIENTE.equalsIgnoreCase(tx.getEstatusTransaccion())) {
+                CuentaEntity cuenta = obtenerCuentaBloqueada(tx.getNumeroCuenta());
+                cuenta.setSaldo(cuenta.getSaldo().add(tx.getPrecio()));
+                cuentaRepository.save(cuenta);
+                tx.setEstatusTransaccion(ESTATUS_REVERSADA);
+                tx.setCodigoRespuesta(cod != null ? cod : 99);
+                tx.setMensajeRespuesta(StringUtils.abbreviate(motivo, 250));
+                tx.setSaldoPosterior(cuenta.getSaldo());
+                pagoServicioRepository.save(tx);
+            }
+        }));
     }
 
     private PagoServicioEntity actualizarEstado(Integer idTx, String estatus, int codigo, String msg, String folio) {
@@ -408,7 +435,18 @@ public class PagoServicioServiceImpl implements PagoServicioService {
     }
 
     private <T> T enTransaccion(Supplier<T> action) {
-        return transactionTemplate != null ? transactionTemplate.execute(s -> action.get()) : action.get();
+        if (transactionTemplate == null) {
+            return Objects.requireNonNull(action.get(), "Resultado transaccional nulo");
+        }
+        return Objects.requireNonNull(transactionTemplate.execute(s -> action.get()), "Resultado transaccional nulo");
+    }
+
+    private void ejecutarEnTransaccion(Runnable action) {
+        if (transactionTemplate == null) {
+            action.run();
+            return;
+        }
+        transactionTemplate.executeWithoutResult(s -> action.run());
     }
 
     private static TransactionTemplate crearTxTemplate(PlatformTransactionManager tm) {

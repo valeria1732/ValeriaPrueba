@@ -1,4 +1,4 @@
-package com.proyecto.servicios.service.Impl;
+package com.proyecto.servicios.service.impl;
 
 import com.proyecto.servicios.client.GestoPagoProductClient;
 import com.proyecto.servicios.entity.gestopago.GestoPagoProductoEntity;
@@ -169,7 +169,7 @@ public class ProductoServiceImpl implements ProductoService {
                 entity.setMontoMinimo(prod.getMontoMinimo());
                 entity.setMontoMaximo(prod.getMontoMaximo());
                 entity.setComision(prod.getComision());
-                entity.setActivo(prod.getActivo() != null ? prod.getActivo() : true);
+                entity.setActivo(!Boolean.FALSE.equals(prod.getActivo()));
                 entity.setFechaSincronizacion(LocalDateTime.now());
 
                 gestoPagoProductoRepository.save(entity);

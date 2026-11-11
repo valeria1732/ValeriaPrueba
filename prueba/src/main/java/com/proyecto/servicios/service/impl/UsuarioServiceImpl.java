@@ -1,4 +1,4 @@
-package com.proyecto.servicios.service.Impl;
+package com.proyecto.servicios.service.impl;
 
 import com.proyecto.servicios.config.SecurityConfig;
 import com.proyecto.servicios.entity.sf.ClienteEntity;
@@ -24,7 +24,6 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -130,7 +129,7 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         List<UsuarioResponse> content = pageResult.getContent().stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
 
         return com.proyecto.servicios.model.PageResponse.of(content, pageResult.getNumber(), pageResult.getSize(), pageResult.getTotalElements());
     }
@@ -158,7 +157,7 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         return usuarioRepository.findAll(spec).stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private UsuarioResponse mapToResponse(UsuarioEntity usuario) {

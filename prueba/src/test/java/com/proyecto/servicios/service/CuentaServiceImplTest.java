@@ -5,12 +5,13 @@ import com.proyecto.servicios.entity.sf.CuentaEntity;
 import com.proyecto.servicios.exception.ClienteBusinessException;
 import com.proyecto.servicios.exception.ClienteNotFoundException;
 import com.proyecto.servicios.exception.CuentaNotFoundException;
+import com.proyecto.servicios.model.PageResponse;
 import com.proyecto.servicios.model.cuenta.CuentaActualizaRequest;
 import com.proyecto.servicios.model.cuenta.CuentaCreacionRequest;
 import com.proyecto.servicios.model.cuenta.CuentaResponse;
 import com.proyecto.servicios.repositorys.sf.ClienteRepository;
 import com.proyecto.servicios.repositorys.sf.CuentaRepository;
-import com.proyecto.servicios.service.Impl.CuentaServiceImpl;
+import com.proyecto.servicios.service.impl.CuentaServiceImpl;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -18,6 +19,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -186,5 +189,55 @@ class CuentaServiceImplTest {
 
         assertNotNull(response);
         verify(cuentaRepository, times(1)).save(cuentaActiva);
+    }
+
+    @Test
+    @DisplayName("Debe consultar cuentas paginadas cubriendo todas las combinaciones de filtros y validaciones")
+    void testConsultarCuentasPaginadasYValidaciones() {
+        when(cuentaRepository.findByClienteIdAndEstatus(eq(1), eq("ACTIVA"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(cuentaActiva)));
+        when(cuentaRepository.findByClienteId(eq(1), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(cuentaActiva)));
+        when(cuentaRepository.findByEstatus(eq("ACTIVA"), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(cuentaActiva)));
+        when(cuentaRepository.findAll(any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(cuentaActiva)));
+
+        assertEquals(1, cuentaService.consultarCuentasPaginadas(1, "activa", 0, 10).contenido().size());
+        assertEquals(1, cuentaService.consultarCuentasPaginadas(1, null, -1, 0).contenido().size());
+        assertEquals(1, cuentaService.consultarCuentasPaginadas(null, "ACTIVA", 0, 500).contenido().size());
+        assertEquals(1, cuentaService.consultarCuentasPaginadas(null, null, 0, 10).contenido().size());
+
+        when(clienteRepository.existsById(999)).thenReturn(false);
+        assertThrows(ClienteNotFoundException.class, () -> cuentaService.consultarPorClienteId(999));
+
+        CuentaEntity cuentaDeInactivo = CuentaEntity.builder()
+                .id(20)
+                .cliente(clienteInactivo)
+                .numeroCuenta("0987654321")
+                .clabe("012180098765432101")
+                .saldo(BigDecimal.TEN)
+                .estatus("INACTIVA")
+                .build();
+        when(cuentaRepository.findByNumeroCuenta("0987654321")).thenReturn(Optional.of(cuentaDeInactivo));
+
+        CuentaActualizaRequest activarReq = CuentaActualizaRequest.builder().estatus("ACTIVA").build();
+        assertThrows(ClienteBusinessException.class,
+                () -> cuentaService.actualizarParcial("0987654321", activarReq));
+
+        BigDecimal saldoNegativo = new BigDecimal("-5.00");
+        CuentaActualizaRequest.CuentaActualizaRequestBuilder builderSaldoNeg = CuentaActualizaRequest.builder()
+                .saldo(saldoNegativo);
+        assertThrows(IllegalArgumentException.class, builderSaldoNeg::build);
+
+        CuentaActualizaRequest.CuentaActualizaRequestBuilder builderEstatusInv = CuentaActualizaRequest.builder()
+                .estatus("INVALIDO");
+        assertThrows(IllegalArgumentException.class, builderEstatusInv::build);
+
+        when(cuentaRepository.findByNumeroCuenta("1234567890")).thenReturn(Optional.of(cuentaActiva));
+        when(cuentaRepository.save(any(CuentaEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+        CuentaActualizaRequest vacioReq = CuentaActualizaRequest.builder().build();
+        CuentaResponse sinCambios = cuentaService.actualizarParcial("1234567890", vacioReq);
+        assertEquals("ACTIVA", sinCambios.getEstatus());
     }
 }

@@ -154,8 +154,8 @@ public class GlobalExceptionHandler {
     private String sanitizar(String mensaje) {
         if (mensaje == null) return "Error en el procesamiento de la solicitud";
         return mensaje
-                .replaceAll("(?i)Bearer\\s+[A-Za-z0-9\\-._~+/]+=*", "Bearer [REDACTED]")
-                .replaceAll("(?i)GP-JWT-[A-Za-z0-9\\-]+", "[REDACTED_TOKEN]")
+                .replaceAll("(?i)Bearer\\s+[A-Z0-9\\-._~+/]+=*", "Bearer [REDACTED]")
+                .replaceAll("(?i)GP-JWT-[A-Z0-9\\-]+", "[REDACTED_TOKEN]")
                 .replaceAll("(?i)(password|pin|token|secret)=([^,\\s&]+)", "$1=[REDACTED]");
     }
 }

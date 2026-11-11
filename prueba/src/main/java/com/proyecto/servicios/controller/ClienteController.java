@@ -1,6 +1,7 @@
 package com.proyecto.servicios.controller;
 
 import com.proyecto.servicios.model.cliente.ClienteActualizaRequest;
+import com.proyecto.servicios.model.cliente.ClienteFiltroRequest;
 import com.proyecto.servicios.model.cliente.ClientePatchRequest;
 import com.proyecto.servicios.model.cliente.ClienteRegistroRequest;
 import com.proyecto.servicios.model.cliente.ClienteResponse;
@@ -103,9 +104,19 @@ public class ClienteController {
             @RequestParam(name = "size", defaultValue = "10") int size) {
         log.info("Petición recibida en GET /clientes con filtros - nombre: {}, curp: {}, page: {}, size: {}",
                 nombre, curp, page, size);
-        com.proyecto.servicios.model.PageResponse<ClienteResponse> clientes = clienteService.consultarClientesPaginados(
-                nombre, apellidoPaterno, apellidoMaterno, curp, rfc, correo, activo, fechaInicio, fechaFin, page, size
-        );
+        ClienteFiltroRequest filtro = ClienteFiltroRequest.builder()
+                .nombre(nombre)
+                .apellidoPaterno(apellidoPaterno)
+                .apellidoMaterno(apellidoMaterno)
+                .curp(curp)
+                .rfc(rfc)
+                .correo(correo)
+                .activo(activo)
+                .fechaInicio(fechaInicio)
+                .fechaFin(fechaFin)
+                .build();
+        com.proyecto.servicios.model.PageResponse<ClienteResponse> clientes =
+                clienteService.consultarClientesPaginados(filtro, page, size);
         return ResponseEntity.ok(clientes);
     }
 

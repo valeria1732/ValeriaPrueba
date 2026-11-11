@@ -18,17 +18,13 @@ public class GestoPagoCustomErrorDecoder implements ErrorDecoder {
         log.error("Error devuelto por servicio externo en método {}: status={}", methodKey, status);
 
         switch (status) {
-            case 401:
-            case 403:
+            case 401, 403:
                 return new GestoPagoAuthException("Autenticación fallida o token inválido al invocar el servicio externo (HTTP " + status + ")");
-            case 408:
-            case 504:
+            case 408, 504:
                 return new GestoPagoTimeoutException("Tiempo de espera agotado al conectar con el servicio externo (HTTP " + status + ")");
             case 404:
                 return new GestoPagoIntegrationException("El recurso solicitado no fue encontrado en el servicio externo (HTTP 404)", 404);
-            case 500:
-            case 502:
-            case 503:
+            case 500, 502, 503:
                 return new GestoPagoIntegrationException("Error interno en el servidor del servicio externo (HTTP " + status + ")", status);
             default:
                 return defaultErrorDecoder.decode(methodKey, response);

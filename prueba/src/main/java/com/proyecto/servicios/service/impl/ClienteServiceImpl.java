@@ -1,4 +1,4 @@
-package com.proyecto.servicios.service.Impl;
+package com.proyecto.servicios.service.impl;
 
 import com.proyecto.servicios.entity.sf.*;
 import com.proyecto.servicios.exception.*;
@@ -28,6 +28,8 @@ import java.util.stream.*;
 @Service
 @Slf4j
 public class ClienteServiceImpl implements ClienteService {
+
+    private static final String CLIENTE_NO_ENCONTRADO_ID = "No se encontró ningún cliente con el ID: ";
 
     private final ClienteRepository clienteRepository;
     private final DomicilioRepository domicilioRepository;
@@ -144,7 +146,7 @@ public class ClienteServiceImpl implements ClienteService {
     public ClienteResponse consultarPorId(Integer id) {
         log.info("Consultando cliente por ID: {}", id);
         ClienteEntity cliente = clienteRepository.findById(id)
-                .orElseThrow(() -> new ClienteNotFoundException("No se encontró ningún cliente con el ID: " + id));
+                .orElseThrow(() -> new ClienteNotFoundException(CLIENTE_NO_ENCONTRADO_ID + id));
         return mapToResponse(cliente);
     }
 
@@ -186,81 +188,86 @@ public class ClienteServiceImpl implements ClienteService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<ClienteResponse> consultarClientesPaginados(
-            String nombre,
-            String apellidoPaterno,
-            String apellidoMaterno,
-            String curp,
-            String rfc,
-            String correo,
-            Boolean activo,
-            LocalDate fechaInicio,
-            LocalDate fechaFin,
-            int page,
-            int size) {
+    public PageResponse<ClienteResponse> consultarClientesPaginados(ClienteFiltroRequest filtro, int page, int size) {
 
         int safePage = Math.max(page, 0);
         int safeSize = size > 0 ? Math.min(size, 100) : 10;
         Pageable pageable = PageRequest.of(safePage, safeSize);
 
-        Specification<ClienteEntity> spec = createClienteSpecification(
-                nombre, apellidoPaterno, apellidoMaterno, curp, rfc, correo, activo, fechaInicio, fechaFin
-        );
+        Specification<ClienteEntity> spec = createClienteSpecification(filtro);
 
         Page<ClienteEntity> pageResult = clienteRepository.findAll(spec, pageable);
         List<ClienteResponse> content = pageResult.getContent().stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
 
         return PageResponse.of(content, pageResult.getNumber(), pageResult.getSize(), pageResult.getTotalElements());
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<ClienteResponse> consultarClientes(
-            String nombre,
-            String apellidoPaterno,
-            String apellidoMaterno,
-            String curp,
-            String rfc,
-            String correo,
-            Boolean activo,
-            LocalDate fechaInicio,
-            LocalDate fechaFin) {
+    public List<ClienteResponse> consultarClientes(ClienteFiltroRequest filtro) {
 
-        Specification<ClienteEntity> spec = createClienteSpecification(
-                nombre, apellidoPaterno, apellidoMaterno, curp, rfc, correo, activo, fechaInicio, fechaFin
-        );
+        Specification<ClienteEntity> spec = createClienteSpecification(filtro);
 
         return clienteRepository.findAll(spec).stream()
                 .map(this::mapToResponse)
-                .collect(Collectors.toList());
+                .toList();
     }
 
-    private Specification<ClienteEntity> createClienteSpecification(
-            String nombre,
-            String apellidoPaterno,
-            String apellidoMaterno,
-            String curp,
-            String rfc,
-            String correo,
+    private Specification<ClienteEntity> createClienteSpecification(ClienteFiltroRequest filtro) {
+        ClienteFiltroRequest f = filtro != null ? filtro : ClienteFiltroRequest.builder().build();
+        return (root, query, cb) -> {
+            List<Predicate> p = new ArrayList<>();
+            addLikePredicate(p, cb, root, "nombre", f.nombre());
+            addLikePredicate(p, cb, root, "apellidoPaterno", f.apellidoPaterno());
+            addLikePredicate(p, cb, root, "apellidoMaterno", f.apellidoMaterno());
+            addUpperEqualPredicate(p, cb, root, "curp", f.curp());
+            addUpperEqualPredicate(p, cb, root, "rfc", f.rfc());
+            addLikePredicate(p, cb, root, "correo", f.correo());
+            addEstadoYFechasPredicates(p, cb, root, f.activo(), f.fechaInicio(), f.fechaFin());
+            return cb.and(p.toArray(new Predicate[0]));
+        };
+    }
+
+    private void addLikePredicate(
+            List<Predicate> p,
+            jakarta.persistence.criteria.CriteriaBuilder cb,
+            jakarta.persistence.criteria.Root<ClienteEntity> root,
+            String field,
+            String value) {
+        if (StringUtils.isNotBlank(value)) {
+            p.add(cb.like(cb.lower(root.get(field)), "%" + value.trim().toLowerCase() + "%"));
+        }
+    }
+
+    private void addUpperEqualPredicate(
+            List<Predicate> p,
+            jakarta.persistence.criteria.CriteriaBuilder cb,
+            jakarta.persistence.criteria.Root<ClienteEntity> root,
+            String field,
+            String value) {
+        if (StringUtils.isNotBlank(value)) {
+            p.add(cb.equal(cb.upper(root.get(field)), value.trim().toUpperCase()));
+        }
+    }
+
+    private void addEstadoYFechasPredicates(
+            List<Predicate> p,
+            jakarta.persistence.criteria.CriteriaBuilder cb,
+            jakarta.persistence.criteria.Root<ClienteEntity> root,
             Boolean activo,
             LocalDate fechaInicio,
             LocalDate fechaFin) {
-
-        return (root, query, cb) -> {
-            List<Predicate> p = new ArrayList<>();
-            if (StringUtils.isNotBlank(nombre)) p.add(cb.like(cb.lower(root.get("nombre")), "%" + nombre.trim().toLowerCase() + "%"));
-            if (StringUtils.isNotBlank(apellidoPaterno)) p.add(cb.like(cb.lower(root.get("apellidoPaterno")), "%" + apellidoPaterno.trim().toLowerCase() + "%"));
-            if (StringUtils.isNotBlank(apellidoMaterno)) p.add(cb.like(cb.lower(root.get("apellidoMaterno")), "%" + apellidoMaterno.trim().toLowerCase() + "%"));
-            if (StringUtils.isNotBlank(curp)) p.add(cb.equal(cb.upper(root.get("curp")), curp.trim().toUpperCase()));
-            if (StringUtils.isNotBlank(rfc)) p.add(cb.equal(cb.upper(root.get("rfc")), rfc.trim().toUpperCase()));
-            if (StringUtils.isNotBlank(correo)) p.add(cb.like(cb.lower(root.get("correo")), "%" + correo.trim().toLowerCase() + "%"));
-            if (activo != null) p.add(cb.equal(root.get("activo"), activo));
-            if (fechaInicio != null) p.add(cb.greaterThanOrEqualTo(root.get("fechaCreacion"), fechaInicio.atStartOfDay()));
-            if (fechaFin != null) p.add(cb.lessThanOrEqualTo(root.get("fechaCreacion"), fechaFin.atTime(23, 59, 59)));
-            return cb.and(p.toArray(new Predicate[0]));
-        };
+        if (activo != null) {
+            p.add(cb.equal(root.get("activo"), activo));
+        }
+        if (fechaInicio != null) {
+            p.add(cb.greaterThanOrEqualTo(root.get("fechaCreacion"), fechaInicio.atStartOfDay()));
+        }
+        if (fechaFin != null) {
+            p.add(cb.lessThanOrEqualTo(root.get("fechaCreacion"), fechaFin.atTime(23, 59, 59)));
+        }
     }
 
     @Override
@@ -268,7 +275,7 @@ public class ClienteServiceImpl implements ClienteService {
     public ClienteResponse actualizarCliente(Integer id, ClienteActualizaRequest request) {
         log.info("Actualización completa de cliente ID: {}", id);
         ClienteEntity cliente = clienteRepository.findById(id)
-                .orElseThrow(() -> new ClienteNotFoundException("No se encontró ningún cliente con el ID: " + id));
+                .orElseThrow(() -> new ClienteNotFoundException(CLIENTE_NO_ENCONTRADO_ID + id));
 
         cliente.setNombre(request.getNombre().trim());
         cliente.setSegundoNombre(StringUtils.trimToNull(request.getSegundoNombre()));
@@ -296,7 +303,7 @@ public class ClienteServiceImpl implements ClienteService {
     public ClienteResponse actualizarParcial(Integer id, ClientePatchRequest request) {
         log.info("Actualización parcial de cliente ID: {}", id);
         ClienteEntity c = clienteRepository.findById(id)
-                .orElseThrow(() -> new ClienteNotFoundException("No se encontró ningún cliente con el ID: " + id));
+                .orElseThrow(() -> new ClienteNotFoundException(CLIENTE_NO_ENCONTRADO_ID + id));
 
         Optional.ofNullable(request.getNombre()).map(String::trim).ifPresent(c::setNombre);
         Optional.ofNullable(request.getSegundoNombre()).map(StringUtils::trimToNull).ifPresent(c::setSegundoNombre);
@@ -336,7 +343,7 @@ public class ClienteServiceImpl implements ClienteService {
     public void bajaLogica(Integer id) {
         log.info("Ejecutando baja lógica integral para cliente ID: {}", id);
         ClienteEntity cliente = clienteRepository.findById(id)
-                .orElseThrow(() -> new ClienteNotFoundException("No se encontró ningún cliente con el ID: " + id));
+                .orElseThrow(() -> new ClienteNotFoundException(CLIENTE_NO_ENCONTRADO_ID + id));
 
         cliente.setActivo(false);
         Optional.ofNullable(cliente.getCuentas()).ifPresent(cuentas -> cuentas.forEach(c -> {

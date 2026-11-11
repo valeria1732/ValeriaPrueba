@@ -18,8 +18,9 @@ import com.proyecto.servicios.model.pago.PagoServicioResponse;
 import com.proyecto.servicios.repositorys.gestopago.GestoPagoProductoRepository;
 import com.proyecto.servicios.repositorys.sf.CuentaRepository;
 import com.proyecto.servicios.repositorys.sf.PagoServicioRepository;
-import com.proyecto.servicios.service.Impl.PagoServicioServiceImpl;
+import com.proyecto.servicios.service.impl.PagoServicioServiceImpl;
 import com.proyecto.servicios.util.AesEncryptionService;
+import feign.FeignException;
 import feign.Request;
 import feign.RequestTemplate;
 import feign.RetryableException;
@@ -32,6 +33,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionStatus;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -78,8 +81,7 @@ class PagoServicioServiceImplTest {
     void setUp() {
         aesEncryptionService = new AesEncryptionService(
                 "GestoPagoAESSecretKey2026Secure32",
-                "AES/CBC/PKCS5Padding",
-                "1234567890123456"
+                "AES/CBC/PKCS5Padding"
         );
         passwordEncoder = new BCryptPasswordEncoder();
         objectMapper = new ObjectMapper();
@@ -241,7 +243,7 @@ class PagoServicioServiceImplTest {
         MontoInvalidoException ex = assertThrows(MontoInvalidoException.class,
                 () -> pagoServicioService.procesarPagoServicio(validRequest));
 
-        assertTrue(ex.getMessage().contains("inferior al monto mínimo"));
+        assertTrue(ex.getMessage().contains("inferior al mínimo"));
         verify(transactionClient, never()).sendTx(anyString(), any());
     }
 
@@ -254,7 +256,7 @@ class PagoServicioServiceImplTest {
         MontoInvalidoException ex = assertThrows(MontoInvalidoException.class,
                 () -> pagoServicioService.procesarPagoServicio(validRequest));
 
-        assertTrue(ex.getMessage().contains("excede el monto máximo"));
+        assertTrue(ex.getMessage().contains("excede el máximo"));
         verify(transactionClient, never()).sendTx(anyString(), any());
     }
 
@@ -290,8 +292,6 @@ class PagoServicioServiceImplTest {
     @DisplayName("Debe rechazar la operación cuando existe una solicitud duplicada por idempotencyKey")
     void testProcesarPago_SolicitudDuplicadaPorIdempotencyKey() {
         when(gestoPagoProductoRepository.findByIdProducto(202)).thenReturn(Optional.of(productoCatalogo));
-        when(gestoPagoTokenService.obtenerTokenActivo(1001, "DEV_TEST_001")).thenReturn(Optional.of(tokenActivo));
-        when(cuentaRepository.findByNumeroCuentaWithLock("0019547596")).thenReturn(Optional.of(cuentaActiva));
 
         PagoServicioEntity existente = PagoServicioEntity.builder()
                 .id(400)
@@ -358,7 +358,6 @@ class PagoServicioServiceImplTest {
 
         when(pagoServicioRepository.save(any(PagoServicioEntity.class))).thenReturn(registroEnProceso);
         when(pagoServicioRepository.findByIdWithLock(501)).thenReturn(Optional.of(registroEnProceso));
-        when(pagoServicioRepository.findById(501)).thenReturn(Optional.of(registroEnProceso));
 
         GestoPagoTxResponse rechazoResponse = GestoPagoTxResponse.builder()
                 .codigo(14)
@@ -447,6 +446,232 @@ class PagoServicioServiceImplTest {
         assertEquals("REVERSADA", response.getEstatusTransaccion());
         assertEquals(new BigDecimal("1500.00"), cuentaActiva.getSaldo());
         assertEquals(new BigDecimal("1500.00"), response.getSaldoRestante());
+    }
+
+    @Test
+    @DisplayName("Debe validar el JWT del titular cuando viene en Authorization y rechazar tokens inválidos")
+    void testProcesarPago_ValidacionJwtTitular() {
+        String tokenTitularValido = securityConfig.generarToken("cliente@banco.com", 1, 10);
+
+        when(gestoPagoProductoRepository.findByIdProducto(202)).thenReturn(Optional.of(productoCatalogo));
+        when(gestoPagoTokenService.obtenerTokenActivo(1001, "DEV_TEST_001")).thenReturn(Optional.of(tokenActivo));
+        when(cuentaRepository.findByNumeroCuentaWithLock("0019547596")).thenReturn(Optional.of(cuentaActiva));
+        when(pagoServicioRepository.findByIdempotencyKey("IDEMP-JWT-BAD")).thenReturn(Optional.empty());
+
+        assertThrows(CredencialesInvalidasException.class,
+                () -> pagoServicioService.procesarPagoServicio(validRequest, "Bearer token.jwt.invalido", "IDEMP-JWT-BAD"));
+
+        when(pagoServicioRepository.findByIdempotencyKey("IDEMP-JWT-OK")).thenReturn(Optional.empty());
+        when(pagoServicioRepository.existsByNumeroCuentaAndIdServicioAndIdProductoAndTelefonoReferenciaAndPrecioAndEstatusTransaccionInAndFechaCreacionAfter(
+                anyString(), anyInt(), anyInt(), anyString(), any(), anyCollection(), any()
+        )).thenReturn(false);
+
+        PagoServicioEntity txCreada = PagoServicioEntity.builder()
+                .id(601)
+                .numeroCuenta("0019547596")
+                .precio(new BigDecimal("350.00"))
+                .estatusTransaccion("EN_PROCESO")
+                .folioAutorizacion("TX-JWT")
+                .saldoAnterior(new BigDecimal("1500.00"))
+                .saldoPosterior(new BigDecimal("1150.00"))
+                .build();
+        when(pagoServicioRepository.save(any(PagoServicioEntity.class))).thenReturn(txCreada);
+        when(pagoServicioRepository.findById(601)).thenReturn(Optional.of(txCreada));
+        when(transactionClient.sendTx(anyString(), any(GestoPagoTxRequest.class))).thenReturn(
+                GestoPagoTxResponse.builder().codigo(0).mensaje("OK").folio("GP-JWT-1").build());
+
+        PagoServicioResponse ok = pagoServicioService.procesarPagoServicio(
+                validRequest, "Bearer " + tokenTitularValido, "IDEMP-JWT-OK");
+        assertTrue(ok.getExitoso());
+        assertEquals("EXITOSA", ok.getEstatusTransaccion());
+    }
+
+    @Test
+    @DisplayName("Si el proveedor retorna respuesta nula o sin código, debe marcar PENDIENTE_CONCILIACION")
+    void testProcesarPago_RespuestaIndeterminada_MarcaPendiente() {
+        when(gestoPagoProductoRepository.findByIdProducto(202)).thenReturn(Optional.of(productoCatalogo));
+        when(gestoPagoTokenService.obtenerTokenActivo(1001, "DEV_TEST_001")).thenReturn(Optional.of(tokenActivo));
+        when(cuentaRepository.findByNumeroCuentaWithLock("0019547596")).thenReturn(Optional.of(cuentaActiva));
+        when(pagoServicioRepository.findByIdempotencyKey("IDEMP-0001")).thenReturn(Optional.empty());
+        when(pagoServicioRepository.existsByNumeroCuentaAndIdServicioAndIdProductoAndTelefonoReferenciaAndPrecioAndEstatusTransaccionInAndFechaCreacionAfter(
+                anyString(), anyInt(), anyInt(), anyString(), any(), anyCollection(), any()
+        )).thenReturn(false);
+
+        PagoServicioEntity registro = PagoServicioEntity.builder()
+                .id(602)
+                .numeroCuenta("0019547596")
+                .precio(new BigDecimal("350.00"))
+                .estatusTransaccion("EN_PROCESO")
+                .folioAutorizacion("TX-INDET-01")
+                .saldoAnterior(new BigDecimal("1500.00"))
+                .saldoPosterior(new BigDecimal("1150.00"))
+                .build();
+        when(pagoServicioRepository.save(any(PagoServicioEntity.class))).thenReturn(registro);
+        when(pagoServicioRepository.findById(602)).thenReturn(Optional.of(registro));
+        when(transactionClient.sendTx(anyString(), any(GestoPagoTxRequest.class)))
+                .thenReturn(GestoPagoTxResponse.builder().codigo(null).build());
+
+        assertThrows(TransaccionPendienteConciliacionException.class,
+                () -> pagoServicioService.procesarPagoServicio(validRequest));
+        assertEquals("PENDIENTE_CONCILIACION", registro.getEstatusTransaccion());
+    }
+
+    @Test
+    @DisplayName("Conciliación confirmada por proveedor y consulta de estado actual")
+    void testConciliarConfirmadaYConsultarEstado() {
+        PagoServicioEntity txPendiente = PagoServicioEntity.builder()
+                .id(603)
+                .numeroCuenta("0019547596")
+                .precio(new BigDecimal("350.00"))
+                .estatusTransaccion("PENDIENTE_CONCILIACION")
+                .folioAutorizacion("TX-TEMP")
+                .saldoAnterior(new BigDecimal("1500.00"))
+                .saldoPosterior(new BigDecimal("1150.00"))
+                .build();
+
+        when(pagoServicioRepository.findByIdWithLock(603)).thenReturn(Optional.of(txPendiente));
+        when(pagoServicioRepository.findById(603)).thenReturn(Optional.of(txPendiente));
+        when(pagoServicioRepository.save(any(PagoServicioEntity.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ConciliacionRequest reqConfirmada = ConciliacionRequest.builder()
+                .confirmadaPorProveedor(true)
+                .folioProveedor("GP-FINAL-603")
+                .motivo("Confirmada en conciliación")
+                .build();
+
+        PagoServicioResponse conciliada = pagoServicioService.conciliarTransaccion(603, reqConfirmada);
+        assertTrue(conciliada.getExitoso());
+        assertEquals("EXITOSA", conciliada.getEstatusTransaccion());
+        assertEquals("GP-FINAL-603", conciliada.getFolioTransaccion());
+
+        PagoServicioResponse consultada = pagoServicioService.consultarEstadoTransaccion(603);
+        assertEquals("EXITOSA", consultada.getEstatusTransaccion());
+
+        assertThrows(ClienteBusinessException.class,
+                () -> pagoServicioService.conciliarTransaccion(603, reqConfirmada));
+
+        when(pagoServicioRepository.findById(999)).thenReturn(Optional.empty());
+        assertThrows(ClienteBusinessException.class,
+                () -> pagoServicioService.consultarEstadoTransaccion(999));
+    }
+
+    @Test
+    @DisplayName("Validaciones previas de entrada, catálogo, token fallback, saldo y duplicidad reciente")
+    void testValidacionesEntradaTokenSaldoYDuplicidad() {
+        assertThrows(IllegalArgumentException.class, () -> pagoServicioService.procesarPagoServicio(null));
+
+        PagoServicioRequest montoZero = PagoServicioRequest.builder()
+                .numCuenta("0019547596")
+                .idServicio(101)
+                .idProducto(202)
+                .precio(BigDecimal.ZERO)
+                .distribuidor(1001)
+                .telefonoReferencia("5512345678")
+                .pin("Password123!")
+                .build();
+        assertThrows(MontoInvalidoException.class, () -> pagoServicioService.procesarPagoServicio(montoZero));
+
+        PagoServicioRequest sinPin = PagoServicioRequest.builder()
+                .numCuenta("0019547596")
+                .idServicio(101)
+                .idProducto(202)
+                .precio(new BigDecimal("100.00"))
+                .distribuidor(1001)
+                .telefonoReferencia("5512345678")
+                .pin("")
+                .build();
+        assertThrows(ContrasenaInvalidaException.class, () -> pagoServicioService.procesarPagoServicio(sinPin));
+
+        productoCatalogo.setActivo(false);
+        when(gestoPagoProductoRepository.findByIdProducto(202)).thenReturn(Optional.of(productoCatalogo));
+        assertThrows(MontoInvalidoException.class, () -> pagoServicioService.procesarPagoServicio(validRequest));
+        productoCatalogo.setActivo(true);
+
+        when(gestoPagoTokenService.obtenerTokenActivo(1001, "DEV_TEST_001")).thenReturn(Optional.empty());
+        when(gestoPagoTokenService.asegurarTokenActivo(1001, "DEV_TEST_001"))
+                .thenThrow(new RuntimeException("sin bd"));
+        when(cuentaRepository.findByNumeroCuentaWithLock("0019547596")).thenReturn(Optional.empty());
+        assertThrows(CuentaNotFoundException.class, () -> pagoServicioService.procesarPagoServicio(validRequest));
+
+        cuentaActiva.setEstatus("BLOQUEADA");
+        when(cuentaRepository.findByNumeroCuentaWithLock("0019547596")).thenReturn(Optional.of(cuentaActiva));
+        assertThrows(ClienteBusinessException.class, () -> pagoServicioService.procesarPagoServicio(validRequest));
+        cuentaActiva.setEstatus("ACTIVA");
+
+        usuarioActivo.setActivo(false);
+        assertThrows(UsuarioInactivoException.class, () -> pagoServicioService.procesarPagoServicio(validRequest));
+        usuarioActivo.setActivo(true);
+
+        validRequest.setPin("PIN_ERRONEO");
+        assertThrows(ContrasenaInvalidaException.class, () -> pagoServicioService.procesarPagoServicio(validRequest));
+        validRequest.setPin("Password123!");
+
+        when(pagoServicioRepository.findByIdempotencyKey("IDEMP-0001")).thenReturn(Optional.empty());
+        when(pagoServicioRepository.existsByNumeroCuentaAndIdServicioAndIdProductoAndTelefonoReferenciaAndPrecioAndEstatusTransaccionInAndFechaCreacionAfter(
+                anyString(), anyInt(), anyInt(), anyString(), any(), anyCollection(), any()
+        )).thenReturn(true);
+        assertThrows(TransaccionDuplicadaException.class, () -> pagoServicioService.procesarPagoServicio(validRequest));
+
+        when(pagoServicioRepository.existsByNumeroCuentaAndIdServicioAndIdProductoAndTelefonoReferenciaAndPrecioAndEstatusTransaccionInAndFechaCreacionAfter(
+                anyString(), anyInt(), anyInt(), anyString(), any(), anyCollection(), any()
+        )).thenReturn(false);
+        validRequest.setPrecio(new BigDecimal("4000.00"));
+        assertThrows(SaldoInsuficienteException.class, () -> pagoServicioService.procesarPagoServicio(validRequest));
+    }
+
+    @Test
+    @DisplayName("Debe ejecutar correctamente dentro de TransactionTemplate y revertir ante GestoPagoAuthException o Feign 500")
+    @SuppressWarnings("unchecked")
+    void testTransactionTemplateYErroresProveedor() {
+        PlatformTransactionManager txManager = mock(PlatformTransactionManager.class);
+        when(txManager.getTransaction(any())).thenReturn(mock(TransactionStatus.class));
+
+        PagoServicioServiceImpl servicioConTx = new PagoServicioServiceImpl(
+                cuentaRepository,
+                gestoPagoTokenService,
+                transactionClient,
+                aesEncryptionService,
+                passwordEncoder,
+                objectMapper,
+                pagoServicioRepository,
+                gestoPagoProductoRepository,
+                securityConfig,
+                txManager
+        );
+        ReflectionTestUtils.setField(servicioConTx, "defaultCodigoDispositivo", "DEV_TEST_001");
+        ReflectionTestUtils.setField(servicioConTx, "configuredBearerToken", "");
+
+        when(gestoPagoProductoRepository.findByIdProducto(202)).thenReturn(Optional.of(productoCatalogo));
+        when(gestoPagoTokenService.obtenerTokenActivo(1001, "DEV_TEST_001")).thenReturn(Optional.of(tokenActivo));
+        when(cuentaRepository.findByNumeroCuentaWithLock("0019547596")).thenReturn(Optional.of(cuentaActiva));
+        when(pagoServicioRepository.findByIdempotencyKey("IDEMP-0001")).thenReturn(Optional.empty());
+        when(pagoServicioRepository.existsByNumeroCuentaAndIdServicioAndIdProductoAndTelefonoReferenciaAndPrecioAndEstatusTransaccionInAndFechaCreacionAfter(
+                anyString(), anyInt(), anyInt(), anyString(), any(), anyCollection(), any()
+        )).thenReturn(false);
+
+        PagoServicioEntity tx = PagoServicioEntity.builder()
+                .id(700)
+                .numeroCuenta("0019547596")
+                .precio(new BigDecimal("350.00"))
+                .estatusTransaccion("EN_PROCESO")
+                .folioAutorizacion("TX-ERR-700")
+                .saldoAnterior(new BigDecimal("1500.00"))
+                .saldoPosterior(new BigDecimal("1150.00"))
+                .build();
+        when(pagoServicioRepository.save(any(PagoServicioEntity.class))).thenReturn(tx);
+        when(pagoServicioRepository.findByIdWithLock(700)).thenReturn(Optional.of(tx));
+
+        when(transactionClient.sendTx(anyString(), any(GestoPagoTxRequest.class)))
+                .thenThrow(new GestoPagoAuthException("Token inválido"));
+        assertThrows(GestoPagoAuthException.class, () -> servicioConTx.procesarPagoServicio(validRequest));
+        assertEquals(new BigDecimal("1500.00"), cuentaActiva.getSaldo());
+
+        tx.setEstatusTransaccion("EN_PROCESO");
+        Request req = Request.create(Request.HttpMethod.POST, "/tx", new HashMap<>(), Request.Body.empty(), new RequestTemplate());
+        when(transactionClient.sendTx(anyString(), any(GestoPagoTxRequest.class)))
+                .thenThrow(new FeignException.InternalServerError("500", req, null, null));
+        assertThrows(GestoPagoIntegrationException.class, () -> servicioConTx.procesarPagoServicio(validRequest));
+        assertEquals("REVERSADA", tx.getEstatusTransaccion());
     }
 }
 

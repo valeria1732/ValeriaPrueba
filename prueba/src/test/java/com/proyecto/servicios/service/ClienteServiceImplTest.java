@@ -9,7 +9,9 @@ import com.proyecto.servicios.exception.ClienteNotFoundException;
 import com.proyecto.servicios.exception.CorreoDuplicadoException;
 import com.proyecto.servicios.exception.CurpDuplicadaException;
 import com.proyecto.servicios.exception.RfcDuplicadoException;
+import com.proyecto.servicios.model.PageResponse;
 import com.proyecto.servicios.model.cliente.ClienteActualizaRequest;
+import com.proyecto.servicios.model.cliente.ClienteFiltroRequest;
 import com.proyecto.servicios.model.cliente.ClientePatchRequest;
 import com.proyecto.servicios.model.cliente.ClienteRegistroRequest;
 import com.proyecto.servicios.model.cliente.ClienteResponse;
@@ -18,14 +20,23 @@ import com.proyecto.servicios.repositorys.sf.ClienteRepository;
 import com.proyecto.servicios.repositorys.sf.CuentaRepository;
 import com.proyecto.servicios.repositorys.sf.DomicilioRepository;
 import com.proyecto.servicios.repositorys.sf.UsuarioRepository;
-import com.proyecto.servicios.service.Impl.ClienteServiceImpl;
+import com.proyecto.servicios.service.impl.ClienteServiceImpl;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -227,29 +238,27 @@ class ClienteServiceImplTest {
     @Test
     @DisplayName("Debe lanzar ClienteBusinessException si el cliente es menor de edad")
     void testRegistrarCliente_MenorDeEdad() {
-        ClienteBusinessException ex = assertThrows(ClienteBusinessException.class, () -> {
-            ClienteRegistroRequest menor = ClienteRegistroRequest.builder()
-                    .nombre("Mariana")
-                    .segundoNombre("Sofia")
-                    .apellidoPaterno("Hernandez")
-                    .apellidoMaterno("Torres")
-                    .fechaNacimiento(LocalDate.now().minusYears(17))
-                    .curp("HETM940822MDFRRN03")
-                    .rfc("HETM9408228K4")
-                    .sexo("FEMENINO")
-                    .nacionalidad("Mexicana")
-                    .estadoCivil("SOLTERO")
-                    .correo("mariana.hernandez@example.com")
-                    .telefonoMovil("5512345678")
-                    .domicilio(registroRequest.getDomicilio())
-                    .ocupacion("Desarrollador de Software")
-                    .empresa("Fintech S.A.")
-                    .ingresoMensual(new BigDecimal("35000.00"))
-                    .password("Segura123!")
-                    .saldoInicial(new BigDecimal("1000.00"))
-                    .build();
-            clienteService.registrarCliente(menor);
-        });
+        ClienteRegistroRequest.ClienteRegistroRequestBuilder menorBuilder = ClienteRegistroRequest.builder()
+                .nombre("Mariana")
+                .segundoNombre("Sofia")
+                .apellidoPaterno("Hernandez")
+                .apellidoMaterno("Torres")
+                .fechaNacimiento(LocalDate.now().minusYears(17))
+                .curp("HETM940822MDFRRN03")
+                .rfc("HETM9408228K4")
+                .sexo("FEMENINO")
+                .nacionalidad("Mexicana")
+                .estadoCivil("SOLTERO")
+                .correo("mariana.hernandez@example.com")
+                .telefonoMovil("5512345678")
+                .domicilio(registroRequest.getDomicilio())
+                .ocupacion("Desarrollador de Software")
+                .empresa("Fintech S.A.")
+                .ingresoMensual(new BigDecimal("35000.00"))
+                .password("Segura123!")
+                .saldoInicial(new BigDecimal("1000.00"));
+        ClienteBusinessException ex = assertThrows(ClienteBusinessException.class,
+                menorBuilder::build);
         assertTrue(ex.getMessage().contains("mayor de edad"));
     }
 
@@ -373,8 +382,73 @@ class ClienteServiceImplTest {
         when(clienteRepository.findAll(any(Specification.class))).thenReturn(List.of(clienteEntity));
 
         List<ClienteResponse> lista = clienteService.consultarClientes(
-                "Mariana", null, null, null, null, null, true, null, null);
+                ClienteFiltroRequest.builder().nombre("Mariana").activo(true).build());
         assertNotNull(lista);
         assertEquals(1, lista.size());
+    }
+
+    @Test
+    @DisplayName("Debe consultar clientes paginados evaluando todos los predicados y actualizar domicilio")
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void testConsultarPaginadoYActualizarDomicilio() {
+        when(clienteRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(clienteEntity)));
+
+        ClienteFiltroRequest filtroCompleto = ClienteFiltroRequest.builder()
+                .nombre("Mariana")
+                .apellidoPaterno("Hernandez")
+                .apellidoMaterno("Torres")
+                .curp("HETM940822MDFRRN03")
+                .rfc("HETM9408228K4")
+                .correo("mariana.hernandez@example.com")
+                .activo(true)
+                .fechaInicio(LocalDate.of(2025, 1, 1))
+                .fechaFin(LocalDate.of(2026, 12, 31))
+                .build();
+
+        PageResponse<ClienteResponse> paginados = clienteService.consultarClientesPaginados(filtroCompleto, 0, 10);
+        assertEquals(1, paginados.contenido().size());
+
+        ArgumentCaptor<Specification<ClienteEntity>> captor = ArgumentCaptor.forClass(Specification.class);
+        verify(clienteRepository).findAll(captor.capture(), any(Pageable.class));
+
+        Root<ClienteEntity> root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        Path path = mock(Path.class);
+        Predicate pred = mock(Predicate.class);
+        lenient().when(root.get(anyString())).thenReturn(path);
+        lenient().when(cb.lower(any(Expression.class))).thenReturn(mock(Expression.class));
+        lenient().when(cb.upper(any(Expression.class))).thenReturn(mock(Expression.class));
+        lenient().when(cb.like(any(Expression.class), anyString())).thenReturn(pred);
+        lenient().when(cb.equal(any(), any())).thenReturn(pred);
+        lenient().when(cb.greaterThanOrEqualTo(any(), any(LocalDateTime.class))).thenReturn(pred);
+        lenient().when(cb.lessThanOrEqualTo(any(), any(LocalDateTime.class))).thenReturn(pred);
+        lenient().when(cb.and(any(Predicate[].class))).thenReturn(pred);
+
+        assertSame(pred, captor.getValue().toPredicate(root, query, cb));
+
+        clienteService.consultarClientes(null);
+        verify(clienteRepository).findAll(captor.capture());
+        assertSame(pred, captor.getValue().toPredicate(root, query, cb));
+
+        when(clienteRepository.findById(1)).thenReturn(Optional.of(clienteEntity));
+        when(clienteRepository.save(any(ClienteEntity.class))).thenReturn(clienteEntity);
+
+        ClientePatchRequest patchConDom = ClientePatchRequest.builder()
+                .domicilio(DomicilioDTO.builder()
+                        .calle("Reforma")
+                        .numeroExterior("100")
+                        .colonia("Juarez")
+                        .municipio("Cuauhtemoc")
+                        .estado("CDMX")
+                        .codigoPostal("06600")
+                        .pais("Mexico")
+                        .build())
+                .build();
+
+        ClienteResponse actualizado = clienteService.actualizarParcial(1, patchConDom);
+        assertNotNull(actualizado);
+        verify(domicilioRepository).save(domicilioEntity);
     }
 }

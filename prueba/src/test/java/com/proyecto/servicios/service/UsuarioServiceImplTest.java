@@ -4,20 +4,30 @@ import com.proyecto.servicios.config.SecurityConfig;
 import com.proyecto.servicios.entity.sf.ClienteEntity;
 import com.proyecto.servicios.entity.sf.UsuarioEntity;
 import com.proyecto.servicios.exception.*;
+import com.proyecto.servicios.model.PageResponse;
 import com.proyecto.servicios.model.usuario.LoginRequest;
 import com.proyecto.servicios.model.usuario.LoginResponse;
 import com.proyecto.servicios.model.usuario.UsuarioCreacionRequest;
 import com.proyecto.servicios.model.usuario.UsuarioResponse;
 import com.proyecto.servicios.repositorys.sf.ClienteRepository;
 import com.proyecto.servicios.repositorys.sf.UsuarioRepository;
-import com.proyecto.servicios.service.Impl.UsuarioServiceImpl;
+import com.proyecto.servicios.service.impl.UsuarioServiceImpl;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.Path;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
@@ -187,5 +197,54 @@ class UsuarioServiceImplTest {
 
         assertNotNull(list);
         assertEquals(1, list.size());
+    }
+
+    @Test
+    @DisplayName("Debe validar duplicidad por cliente, formato de contraseña y consultar paginado con Specification")
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void testAgregarValidacionesYPaginado() {
+        UsuarioCreacionRequest conPassDebil = UsuarioCreacionRequest.builder()
+                .clienteId(1)
+                .correo("nuevo@example.com")
+                .password("solominusculas123")
+                .build();
+        when(clienteRepository.findById(1)).thenReturn(Optional.of(clienteEntity));
+        when(usuarioRepository.findByClienteId(1)).thenReturn(Optional.empty());
+        assertThrows(ContrasenaInvalidaException.class, () -> usuarioService.agregarUsuario(conPassDebil));
+
+        UsuarioCreacionRequest clienteYaConUsuario = UsuarioCreacionRequest.builder()
+                .clienteId(1)
+                .correo("nuevo@example.com")
+                .password("Segura123!")
+                .build();
+        when(usuarioRepository.findByClienteId(1)).thenReturn(Optional.of(usuarioActivo));
+        assertThrows(ClienteBusinessException.class, () -> usuarioService.agregarUsuario(clienteYaConUsuario));
+
+        when(usuarioRepository.findAll(any(Specification.class), any(Pageable.class)))
+                .thenReturn(new PageImpl<>(List.of(usuarioActivo)));
+
+        PageResponse<UsuarioResponse> pagina = usuarioService.consultarUsuariosConFiltroPaginados("mariana", true, 0, 10);
+        assertNotNull(pagina);
+        assertEquals(1, pagina.contenido().size());
+
+        ArgumentCaptor<Specification<UsuarioEntity>> captor = ArgumentCaptor.forClass(Specification.class);
+        verify(usuarioRepository).findAll(captor.capture(), any(Pageable.class));
+
+        Root<UsuarioEntity> root = mock(Root.class);
+        CriteriaQuery<?> query = mock(CriteriaQuery.class);
+        CriteriaBuilder cb = mock(CriteriaBuilder.class);
+        Path path = mock(Path.class);
+        Predicate pred = mock(Predicate.class);
+        lenient().when(root.get(anyString())).thenReturn(path);
+        lenient().when(cb.lower(any(Expression.class))).thenReturn(mock(Expression.class));
+        lenient().when(cb.like(any(Expression.class), anyString())).thenReturn(pred);
+        lenient().when(cb.equal(any(), any())).thenReturn(pred);
+        lenient().when(cb.and(any(Predicate[].class))).thenReturn(pred);
+
+        assertSame(pred, captor.getValue().toPredicate(root, query, cb));
+
+        usuarioService.consultarUsuariosConFiltroPaginados(null, null, -1, 0);
+        verify(usuarioRepository, times(2)).findAll(captor.capture(), any(Pageable.class));
+        assertSame(pred, captor.getValue().toPredicate(root, query, cb));
     }
 }

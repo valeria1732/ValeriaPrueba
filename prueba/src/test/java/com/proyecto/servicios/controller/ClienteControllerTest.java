@@ -6,6 +6,7 @@ import com.proyecto.servicios.exception.ClienteBusinessException;
 import com.proyecto.servicios.exception.ClienteNotFoundException;
 import com.proyecto.servicios.exception.GlobalExceptionHandler;
 import com.proyecto.servicios.model.cliente.ClienteActualizaRequest;
+import com.proyecto.servicios.model.cliente.ClienteFiltroRequest;
 import com.proyecto.servicios.model.cliente.ClientePatchRequest;
 import com.proyecto.servicios.model.cliente.ClienteRegistroRequest;
 import com.proyecto.servicios.model.cliente.ClienteResponse;
@@ -171,7 +172,7 @@ class ClienteControllerTest {
     void testConsultarClientes_200_OK() throws Exception {
         com.proyecto.servicios.model.PageResponse<ClienteResponse> pageResponse =
                 com.proyecto.servicios.model.PageResponse.of(List.of(mockResponse), 0, 10, 1);
-        when(clienteService.consultarClientesPaginados(any(), any(), any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
+        when(clienteService.consultarClientesPaginados(any(ClienteFiltroRequest.class), anyInt(), anyInt()))
                 .thenReturn(pageResponse);
 
         mockMvc.perform(get("/clientes?nombre=Mariana&page=0&size=10"))
@@ -233,5 +234,30 @@ class ClienteControllerTest {
                 .andExpect(status().isNoContent());
 
         verify(clienteService, times(1)).bajaLogica(1);
+    }
+
+    @Test
+    @DisplayName("GET /clientes por CURP, RFC, correo y cuenta debe responder 200 OK")
+    void testConsultasPorIdentificadorUnico_200_OK() throws Exception {
+        when(clienteService.consultarPorCurp("HETM940822MDFRRN03")).thenReturn(mockResponse);
+        when(clienteService.consultarPorRfc("HETM9408228K4")).thenReturn(mockResponse);
+        when(clienteService.consultarPorCorreo("mariana@example.com")).thenReturn(mockResponse);
+        when(clienteService.consultarPorNumeroCuenta("1234567890")).thenReturn(mockResponse);
+
+        mockMvc.perform(get("/clientes/curp/HETM940822MDFRRN03"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        mockMvc.perform(get("/clientes/rfc/HETM9408228K4"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        mockMvc.perform(get("/clientes/correo/mariana@example.com"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
+
+        mockMvc.perform(get("/clientes/cuenta/1234567890"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(1));
     }
 }
